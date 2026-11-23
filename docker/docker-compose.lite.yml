@@ -1,0 +1,27 @@
+# 轻量模式：1 个容器即可运行（应用 + SQLite + 进程内队列 + 内部 Runner）
+# 使用前先 docker load -i dist/tonglink-studio-lite.tar
+
+services:
+  tonglink:
+    image: tonglink-studio:0.1.0
+    container_name: tonglink-studio
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - tonglink-data:/app/data
+    environment:
+      SPRING_PROFILES_ACTIVE: lite
+      TONGLINK_DB_PATH: /app/data/tonglink.db
+      # 生产环境务必覆盖以下密钥
+      TONGLINK_CRYPTO_KEY: ${TONGLINK_CRYPTO_KEY:-change-me-in-production}
+      TONGLINK_JWT_SECRET: ${TONGLINK_JWT_SECRET:-change-me-in-production-jwt-secret-long}
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/actuator/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  tonglink-data:

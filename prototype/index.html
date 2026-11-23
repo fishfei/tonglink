@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TongLink Studio · IT/OT 数采平台原型</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" id="brandMark"></span>
+      <span class="brand-name">TongLink Studio</span>
+      <span class="badge badge-info badge-soft">v0.1 原型</span>
+    </div>
+    <div class="topbar-search">
+      <span class="search-icon" id="topSearchIcon"></span>
+      <input id="globalSearch" type="text" placeholder="搜索数据源、流程、变量…" autocomplete="off">
+      <span class="kbd">Ctrl K</span>
+    </div>
+    <div class="topbar-right">
+      <label class="env-switch">
+        <span id="envIcon"></span>
+        <select id="envSelect" aria-label="环境切换">
+          <option value="prod">生产环境</option>
+          <option value="test">测试环境</option>
+        </select>
+      </label>
+      <span class="env-dot" id="envDot"></span>
+      <button class="avatar" id="topAvatar" data-action="logout" title="退出登录">管</button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <nav class="nav" id="mainNav">
+        <a class="nav-item" href="#/dashboard" data-nav="dashboard"><span class="nav-icon" data-icon="dashboard"></span><span>数据看板</span></a>
+        <a class="nav-item" href="#/sources" data-nav="sources"><span class="nav-icon" data-icon="database"></span><span>数据源管理</span></a>
+        <a class="nav-item" href="#/flows" data-nav="flows"><span class="nav-icon" data-icon="workflow"></span><span>流程编排</span><span class="nav-count" id="navFlowCount">3</span></a>
+        <a class="nav-item" href="#/executions" data-nav="executions"><span class="nav-icon" data-icon="terminal"></span><span>执行日志</span></a>
+        <a class="nav-item" href="#/variables" data-nav="variables"><span class="nav-icon" data-icon="key"></span><span>变量配置</span></a>
+        <div class="nav-divider"></div>
+        <a class="nav-item" href="#/ai" data-nav="ai"><span class="nav-icon" data-icon="sparkles"></span><span>AI 助手</span><span class="badge badge-purple badge-soft">NEW</span></a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="edge-status">
+          <span class="pulse-dot"></span>
+          <div>
+            <div class="edge-title">采集节点 <strong>24</strong></div>
+            <div class="edge-sub">在线 21 · 离线 3</div>
+          </div>
+        </div>
+        <div class="sidebar-version">MIT Open Source</div>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main id="page" class="page"></main>
+  </div>
+
+  <!-- 全局 AI 悬浮球 -->
+  <button class="ai-fab" id="aiFab" data-action="ai-open" title="打开 AI 助手">
+    <span id="aiFabIcon"></span>
+  </button>
+
+  <!-- 抽屉 / 弹窗 / Toast 挂载点 -->
+  <div id="overlayRoot"></div>
+  <div id="toastRoot" class="toast-root"></div>
+
+  <script src="icons.js"></script>
+  <script src="data.js"></script>
+  <script src="charts.js"></script>
+  <script src="dag-editor.js"></script>
+  <script src="ai.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

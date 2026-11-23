@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>cn.tonglink</groupId><artifactId>tonglink-studio</artifactId><version>0.1.0</version></parent>
+  <artifactId>tonglink-app</artifactId>
+  <name>tonglink-app</name>
+  <description>启动装配与静态资源托管</description>
+  <dependencies>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-execution</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-scheduler</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-ai</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-security</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-validation</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+    <dependency><groupId>org.springdoc</groupId><artifactId>springdoc-openapi-starter-webmvc-ui</artifactId></dependency>
+  </dependencies>
+
+  <build>
+    <finalName>tonglink-studio</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration><mainClass>cn.tonglink.app.TongLinkApplication</mainClass></configuration>
+      </plugin>
+      <!--
+        使用 Jib 直接构建 OCI 镜像 tar，无需本机安装 Docker。
+        基础镜像带 Python；Java 与 Node 运行时由 docker/extra 目录注入，
+        因此轻量模式单容器即可执行 Node.js / Python 代码节点。
+      -->
+      <plugin>
+        <groupId>com.google.cloud.tools</groupId>
+        <artifactId>jib-maven-plugin</artifactId>
+        <configuration>
+          <!-- 国内直连 Docker Hub 常不可达，改用 daocloud 公共镜像源的同一官方镜像 -->
+          <from><image>docker.m.daocloud.io/library/python:3.11-slim-bookworm</image></from>
+          <to><image>tonglink-studio:0.1.0</image></to>
+          <container>
+            <mainClass>cn.tonglink.app.TongLinkApplication</mainClass>
+            <ports><port>8080</port></ports>
+            <workingDirectory>/app</workingDirectory>
+            <environment>
+              <SPRING_PROFILES_ACTIVE>lite</SPRING_PROFILES_ACTIVE>
+              <TONGLINK_DB_PATH>/app/data/tonglink.db</TONGLINK_DB_PATH>
+              <JAVA_HOME>/opt/java</JAVA_HOME>
+              <PATH>/opt/java/bin:/opt/node/bin:/usr/local/bin:/usr/bin:/bin</PATH>
+            </environment>
+            <volumes><volume>/app/data</volume></volumes>
+          </container>
+          <extraDirectories>
+            <paths>
+              <path>
+                <!-- tonglink-app 位于 backend/ 下，仓库根的 docker/extra 需要回退两级 -->
+                <from>../../docker/extra</from>
+                <into>/</into>
+              </path>
+            </paths>
+            <!-- Windows 文件系统无法保存 Linux 执行位，这里显式声明 -->
+            <permissions>
+              <permission><file>/opt/java/bin/java</file><mode>755</mode></permission>
+              <!-- jspawnhelper 实际在 lib/ 下，Java 拉起 Node/Python 子进程时会用到，必须可执行 -->
+              <permission><file>/opt/java/lib/jspawnhelper</file><mode>755</mode></permission>
+              <permission><file>/opt/node/bin/node</file><mode>755</mode></permission>
+            </permissions>
+          </extraDirectories>
+          <outputPaths>
+            <!-- 产物落到仓库根 dist/，和部署脚本、文档保持一致 -->
+            <tar>${project.basedir}/../../dist/tonglink-studio-lite.tar</tar>
+          </outputPaths>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

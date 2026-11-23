@@ -1,0 +1,2020 @@
+{
+  "catalog": [
+    {
+      "group": "触发器",
+      "items": [
+        {
+          "type": "trigger",
+          "subtype": "schedule",
+          "title": "定时触发",
+          "icon": "clock",
+          "color": "orange"
+        },
+        {
+          "type": "trigger",
+          "subtype": "manual",
+          "title": "手动触发",
+          "icon": "play",
+          "color": "orange"
+        }
+      ]
+    },
+    {
+      "group": "数据源",
+      "items": [
+        {
+          "type": "source",
+          "subtype": "opcua",
+          "title": "OPC UA 读取",
+          "icon": "cpu",
+          "color": "teal"
+        },
+        {
+          "type": "source",
+          "subtype": "modbus",
+          "title": "Modbus 读取",
+          "icon": "cpu",
+          "color": "teal"
+        },
+        {
+          "type": "source",
+          "subtype": "mqtt",
+          "title": "MQTT 订阅",
+          "icon": "cloud",
+          "color": "teal"
+        },
+        {
+          "type": "source",
+          "subtype": "http",
+          "title": "HTTP 请求",
+          "icon": "api",
+          "color": "blue"
+        },
+        {
+          "type": "source",
+          "subtype": "kafka",
+          "title": "Kafka 消费",
+          "icon": "layers",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "group": "数据库（支持增删改查）",
+      "items": [
+        {
+          "type": "source",
+          "subtype": "mysql",
+          "title": "MySQL 查询",
+          "icon": "database",
+          "color": "blue"
+        },
+        {
+          "type": "source",
+          "subtype": "oracle",
+          "title": "Oracle 查询",
+          "icon": "database",
+          "color": "blue"
+        },
+        {
+          "type": "source",
+          "subtype": "postgres",
+          "title": "PostgreSQL 查询",
+          "icon": "database",
+          "color": "blue"
+        },
+        {
+          "type": "source",
+          "subtype": "sqlserver",
+          "title": "SQL Server 查询",
+          "icon": "database",
+          "color": "blue"
+        },
+        {
+          "type": "source",
+          "subtype": "mongodb",
+          "title": "MongoDB 查询",
+          "icon": "database",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "group": "代码与逻辑",
+      "items": [
+        {
+          "type": "code",
+          "subtype": "nodejs",
+          "title": "Node.js 代码",
+          "icon": "code",
+          "color": "purple"
+        },
+        {
+          "type": "code",
+          "subtype": "python",
+          "title": "Python 代码",
+          "icon": "code",
+          "color": "purple"
+        },
+        {
+          "type": "logic",
+          "subtype": "condition",
+          "title": "条件分支",
+          "icon": "branch",
+          "color": "orange"
+        },
+        {
+          "type": "logic",
+          "subtype": "filter",
+          "title": "数据过滤",
+          "icon": "filter",
+          "color": "orange"
+        },
+        {
+          "type": "logic",
+          "subtype": "merge",
+          "title": "数据合并",
+          "icon": "layers",
+          "color": "orange"
+        },
+        {
+          "type": "logic",
+          "subtype": "delay",
+          "title": "延时等待",
+          "icon": "clock",
+          "color": "orange"
+        }
+      ]
+    },
+    {
+      "group": "输出",
+      "items": [
+        {
+          "type": "output",
+          "subtype": "timeseries",
+          "title": "写入时序库",
+          "icon": "database",
+          "color": "green"
+        },
+        {
+          "type": "output",
+          "subtype": "http",
+          "title": "HTTP 推送",
+          "icon": "webhook",
+          "color": "green"
+        },
+        {
+          "type": "output",
+          "subtype": "feishu_bitable",
+          "title": "飞书多维表格",
+          "icon": "table",
+          "color": "green"
+        },
+        {
+          "type": "output",
+          "subtype": "alert",
+          "title": "告警通知",
+          "icon": "alert",
+          "color": "green"
+        }
+      ]
+    }
+  ],
+  "schemas": {
+    "trigger:schedule": {
+      "title": "定时触发器",
+      "note": "常用间隔可直接选择；复杂调度再切换到 Cron 表达式（秒 分 时 日 月 周）。",
+      "fields": [
+        {
+          "key": "mode",
+          "label": "调度方式",
+          "type": "select",
+          "options": [
+            "minutes",
+            "seconds",
+            "cron"
+          ],
+          "default": "minutes",
+          "required": true,
+          "labels": {
+            "minutes": "每隔 N 分钟",
+            "seconds": "每隔 N 秒",
+            "cron": "Cron 表达式（高级）"
+          },
+          "hint": "简单周期用间隔，复杂规则用 Cron"
+        },
+        {
+          "key": "everyMinutes",
+          "label": "间隔（分钟）",
+          "type": "number",
+          "placeholder": "5",
+          "default": "5",
+          "required": true,
+          "showWhen": {
+            "key": "mode",
+            "in": [
+              "minutes"
+            ]
+          },
+          "hint": "每 5 分钟即从整点起 00:00、00:05、00:10… 执行"
+        },
+        {
+          "key": "everySeconds",
+          "label": "间隔（秒）",
+          "type": "number",
+          "placeholder": "30",
+          "default": "30",
+          "required": true,
+          "showWhen": {
+            "key": "mode",
+            "in": [
+              "seconds"
+            ]
+          },
+          "hint": "秒级调度请确保单次执行时长小于间隔"
+        },
+        {
+          "key": "cron",
+          "label": "Cron 表达式",
+          "type": "text",
+          "placeholder": "0/5 * * * * ?",
+          "required": true,
+          "showWhen": {
+            "key": "mode",
+            "in": [
+              "cron"
+            ]
+          },
+          "hint": "Spring Cron：秒 分 时 日 月 周，例如 0 0 8 * * ? 表示每天 08:00"
+        },
+        {
+          "key": "timezone",
+          "label": "时区",
+          "type": "text",
+          "placeholder": "Asia/Shanghai",
+          "default": "Asia/Shanghai"
+        },
+        {
+          "key": "enabled",
+          "label": "启用调度",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "是"
+        },
+        {
+          "key": "catchUp",
+          "label": "错过执行补偿",
+          "type": "select",
+          "options": [
+            "跳过",
+            "立即补跑"
+          ],
+          "default": "跳过",
+          "hint": "服务重启后对遗漏执行点的处理策略"
+        },
+        {
+          "key": "desc",
+          "label": "说明",
+          "type": "text",
+          "placeholder": "每 5 分钟采集一次"
+        }
+      ]
+    },
+    "trigger:manual": {
+      "title": "手动触发器",
+      "note": "由用户在画布点击“运行”或调用 API 触发。",
+      "fields": [
+        {
+          "key": "allowParams",
+          "label": "允许运行参数",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "否"
+        },
+        {
+          "key": "params",
+          "label": "参数模板 (JSON)",
+          "type": "textarea",
+          "rows": 3,
+          "placeholder": "{\"startDate\": \"2026-11-21\"}",
+          "showWhen": {
+            "key": "allowParams",
+            "in": [
+              "是"
+            ]
+          }
+        },
+        {
+          "key": "desc",
+          "label": "说明",
+          "type": "text",
+          "placeholder": "按需手动执行"
+        }
+      ]
+    },
+    "source:opcua": {
+      "title": "OPC UA 读取节点",
+      "note": "采集前请确认服务端证书信任与节点访问权限。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择已配置的 OPC UA 连接"
+        },
+        {
+          "key": "nodeId",
+          "label": "节点 ID",
+          "type": "text",
+          "placeholder": "ns=3;s=Temperature.PT101",
+          "required": true
+        },
+        {
+          "key": "readMode",
+          "label": "读取方式",
+          "type": "select",
+          "options": [
+            "订阅 (Subscription)",
+            "轮询 (Poll)"
+          ],
+          "default": "订阅 (Subscription)"
+        },
+        {
+          "key": "interval",
+          "label": "采集间隔",
+          "type": "text",
+          "placeholder": "1000ms",
+          "default": "1000ms"
+        },
+        {
+          "key": "qualityFilter",
+          "label": "质量戳过滤",
+          "type": "select",
+          "options": [
+            "仅 GOOD",
+            "不过滤"
+          ],
+          "default": "仅 GOOD"
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "5000ms",
+          "default": "5000ms"
+        }
+      ]
+    },
+    "source:modbus": {
+      "title": "Modbus 读取节点",
+      "note": "寄存器地址从 40001 起算时，请在工具中确认与协议地址的偏移关系。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择已配置的 Modbus TCP 连接"
+        },
+        {
+          "key": "port",
+          "label": "端口",
+          "type": "number",
+          "placeholder": "502",
+          "default": "502"
+        },
+        {
+          "key": "slaveId",
+          "label": "从站号",
+          "type": "number",
+          "placeholder": "1",
+          "default": "1"
+        },
+        {
+          "key": "registerType",
+          "label": "寄存器类型",
+          "type": "select",
+          "options": [
+            "保持寄存器",
+            "输入寄存器",
+            "线圈",
+            "离散输入"
+          ],
+          "default": "保持寄存器"
+        },
+        {
+          "key": "startAddress",
+          "label": "起始地址",
+          "type": "text",
+          "placeholder": "40001",
+          "required": true
+        },
+        {
+          "key": "count",
+          "label": "读取数量",
+          "type": "number",
+          "placeholder": "10",
+          "default": "10"
+        },
+        {
+          "key": "byteOrder",
+          "label": "字节序",
+          "type": "select",
+          "options": [
+            "ABCD",
+            "CDAB",
+            "BADC",
+            "DCBA"
+          ],
+          "default": "ABCD"
+        },
+        {
+          "key": "pollInterval",
+          "label": "轮询间隔",
+          "type": "text",
+          "placeholder": "500ms",
+          "default": "500ms"
+        }
+      ]
+    },
+    "source:mqtt": {
+      "title": "MQTT 订阅节点",
+      "note": "支持通配符主题；生产环境建议启用认证并使用 TLS。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择已配置的 MQTT Broker"
+        },
+        {
+          "key": "topic",
+          "label": "订阅主题",
+          "type": "text",
+          "placeholder": "plant/+/temp",
+          "required": true
+        },
+        {
+          "key": "qos",
+          "label": "QoS",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2"
+          ],
+          "default": "1"
+        },
+        {
+          "key": "clientId",
+          "label": "Client ID",
+          "type": "text",
+          "placeholder": "留空自动生成"
+        },
+        {
+          "key": "payloadFormat",
+          "label": "消息格式",
+          "type": "select",
+          "options": [
+            "JSON",
+            "原始字符串"
+          ],
+          "default": "JSON"
+        },
+        {
+          "key": "cleanSession",
+          "label": "Clean Session",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "是"
+        },
+        {
+          "key": "username",
+          "label": "用户名凭据",
+          "type": "credential",
+          "hint": "从变量配置 → 凭据中选择"
+        },
+        {
+          "key": "password",
+          "label": "密码凭据",
+          "type": "credential",
+          "hint": "从变量配置 → 凭据中选择"
+        }
+      ]
+    },
+    "source:http": {
+      "title": "HTTP 请求节点",
+      "note": "请求头与查询参数使用 JSON 格式，敏感值请引用凭据。",
+      "fields": [
+        {
+          "key": "method",
+          "label": "请求方法",
+          "type": "select",
+          "options": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "default": "GET"
+        },
+        {
+          "key": "url",
+          "label": "请求地址",
+          "type": "text",
+          "placeholder": "https://mes.factory.local/api/v1/orders",
+          "required": true
+        },
+        {
+          "key": "query",
+          "label": "查询参数 (JSON)",
+          "type": "textarea",
+          "rows": 3,
+          "placeholder": "{\"date\": \"today\"}"
+        },
+        {
+          "key": "headers",
+          "label": "请求头 (JSON)",
+          "type": "textarea",
+          "rows": 3,
+          "placeholder": "{\"Content-Type\": \"application/json\"}"
+        },
+        {
+          "key": "auth",
+          "label": "认证凭据",
+          "type": "credential",
+          "hint": "从变量配置 → 凭据中选择，例如 MES_API_TOKEN"
+        },
+        {
+          "key": "expectedStatus",
+          "label": "期望状态码",
+          "type": "text",
+          "placeholder": "200",
+          "default": "200"
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "10000ms",
+          "default": "10000ms"
+        }
+      ]
+    },
+    "source:kafka": {
+      "title": "Kafka 消费节点",
+      "note": "消费位点与分组提交策略会影响数据重复性。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择已配置的 Kafka 连接"
+        },
+        {
+          "key": "topic",
+          "label": "Topic",
+          "type": "text",
+          "placeholder": "factory.events",
+          "required": true
+        },
+        {
+          "key": "groupId",
+          "label": "Consumer Group",
+          "type": "text",
+          "placeholder": "dfs-collector",
+          "required": true
+        },
+        {
+          "key": "offsetReset",
+          "label": "位点策略",
+          "type": "select",
+          "options": [
+            "earliest",
+            "latest"
+          ],
+          "default": "latest"
+        },
+        {
+          "key": "deserializer",
+          "label": "反序列化",
+          "type": "select",
+          "options": [
+            "JSON",
+            "String"
+          ],
+          "default": "JSON"
+        },
+        {
+          "key": "batchSize",
+          "label": "批量大小",
+          "type": "number",
+          "placeholder": "100",
+          "default": "100"
+        },
+        {
+          "key": "autoCommit",
+          "label": "自动提交位点",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "否"
+        }
+      ]
+    },
+    "source:mysql": {
+      "title": "MySQL 数据库节点",
+      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。",
+      "fields": [
+        {
+          "key": "connection",
+          "label": "连接数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从已创建的数据源中选择，无需手填连接串"
+        },
+        {
+          "key": "operation",
+          "label": "操作类型",
+          "type": "select",
+          "options": [
+            "select",
+            "insert",
+            "update",
+            "delete",
+            "execute"
+          ],
+          "default": "select",
+          "required": true,
+          "hint": "SELECT / INSERT / UPDATE / DELETE / 执行原始 SQL"
+        },
+        {
+          "key": "table",
+          "label": "数据表",
+          "type": "text",
+          "placeholder": "schema.table",
+          "required": true,
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "columns",
+          "label": "字段列表",
+          "type": "text",
+          "placeholder": "id, order_no, updated_at",
+          "hint": "SELECT / INSERT 使用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "where",
+          "label": "WHERE 条件",
+          "type": "text",
+          "placeholder": "synced = 0 AND updated_at > {{ $now.minus(5, \"minutes\") }}",
+          "hint": "参数可用 {{ $vars.xxx }} 引用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "values",
+          "label": "写入值 (JSON)",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "{\"order_no\": \"SO-2026-001\"}",
+          "hint": "INSERT 的字段值 / UPDATE 的 SET 值",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert",
+              "update"
+            ]
+          }
+        },
+        {
+          "key": "sql",
+          "label": "自定义 SQL",
+          "type": "textarea",
+          "rows": 5,
+          "placeholder": "SELECT ... FROM ... WHERE ...",
+          "hint": "仅“执行原始 SQL”时启用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "execute"
+            ]
+          }
+        },
+        {
+          "key": "limit",
+          "label": "最大返回行数",
+          "type": "number",
+          "placeholder": "500",
+          "default": "500",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select"
+            ]
+          }
+        },
+        {
+          "key": "conflict",
+          "label": "冲突处理",
+          "type": "text",
+          "placeholder": "ON CONFLICT (id) DO NOTHING",
+          "hint": "可选，留空则使用默认策略",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "30000ms",
+          "default": "30000ms"
+        }
+      ]
+    },
+    "source:oracle": {
+      "title": "Oracle 数据库节点",
+      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。 Oracle 表名通常为大写，注意引号与大小写。",
+      "fields": [
+        {
+          "key": "connection",
+          "label": "连接数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从已创建的数据源中选择，无需手填连接串"
+        },
+        {
+          "key": "operation",
+          "label": "操作类型",
+          "type": "select",
+          "options": [
+            "select",
+            "insert",
+            "update",
+            "delete",
+            "execute"
+          ],
+          "default": "select",
+          "required": true,
+          "hint": "SELECT / INSERT / UPDATE / DELETE / 执行原始 SQL"
+        },
+        {
+          "key": "table",
+          "label": "数据表",
+          "type": "text",
+          "placeholder": "schema.table",
+          "required": true,
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "columns",
+          "label": "字段列表",
+          "type": "text",
+          "placeholder": "id, order_no, updated_at",
+          "hint": "SELECT / INSERT 使用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "where",
+          "label": "WHERE 条件",
+          "type": "text",
+          "placeholder": "synced = 0 AND updated_at > {{ $now.minus(5, \"minutes\") }}",
+          "hint": "参数可用 {{ $vars.xxx }} 引用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "values",
+          "label": "写入值 (JSON)",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "{\"order_no\": \"SO-2026-001\"}",
+          "hint": "INSERT 的字段值 / UPDATE 的 SET 值",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert",
+              "update"
+            ]
+          }
+        },
+        {
+          "key": "sql",
+          "label": "自定义 SQL",
+          "type": "textarea",
+          "rows": 5,
+          "placeholder": "SELECT ... FROM ... WHERE ...",
+          "hint": "仅“执行原始 SQL”时启用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "execute"
+            ]
+          }
+        },
+        {
+          "key": "limit",
+          "label": "最大返回行数",
+          "type": "number",
+          "placeholder": "500",
+          "default": "500",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select"
+            ]
+          }
+        },
+        {
+          "key": "conflict",
+          "label": "冲突处理",
+          "type": "text",
+          "placeholder": "ON CONFLICT (id) DO NOTHING",
+          "hint": "可选，留空则使用默认策略",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "30000ms",
+          "default": "30000ms"
+        }
+      ]
+    },
+    "source:postgres": {
+      "title": "PostgreSQL 数据库节点",
+      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。",
+      "fields": [
+        {
+          "key": "connection",
+          "label": "连接数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从已创建的数据源中选择，无需手填连接串"
+        },
+        {
+          "key": "operation",
+          "label": "操作类型",
+          "type": "select",
+          "options": [
+            "select",
+            "insert",
+            "update",
+            "delete",
+            "execute"
+          ],
+          "default": "select",
+          "required": true,
+          "hint": "SELECT / INSERT / UPDATE / DELETE / 执行原始 SQL"
+        },
+        {
+          "key": "table",
+          "label": "数据表",
+          "type": "text",
+          "placeholder": "schema.table",
+          "required": true,
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "columns",
+          "label": "字段列表",
+          "type": "text",
+          "placeholder": "id, order_no, updated_at",
+          "hint": "SELECT / INSERT 使用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "where",
+          "label": "WHERE 条件",
+          "type": "text",
+          "placeholder": "synced = 0 AND updated_at > {{ $now.minus(5, \"minutes\") }}",
+          "hint": "参数可用 {{ $vars.xxx }} 引用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "values",
+          "label": "写入值 (JSON)",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "{\"order_no\": \"SO-2026-001\"}",
+          "hint": "INSERT 的字段值 / UPDATE 的 SET 值",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert",
+              "update"
+            ]
+          }
+        },
+        {
+          "key": "sql",
+          "label": "自定义 SQL",
+          "type": "textarea",
+          "rows": 5,
+          "placeholder": "SELECT ... FROM ... WHERE ...",
+          "hint": "仅“执行原始 SQL”时启用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "execute"
+            ]
+          }
+        },
+        {
+          "key": "limit",
+          "label": "最大返回行数",
+          "type": "number",
+          "placeholder": "500",
+          "default": "500",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select"
+            ]
+          }
+        },
+        {
+          "key": "conflict",
+          "label": "冲突处理",
+          "type": "text",
+          "placeholder": "ON CONFLICT (id) DO NOTHING",
+          "hint": "可选，留空则使用默认策略",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "30000ms",
+          "default": "30000ms"
+        }
+      ]
+    },
+    "source:sqlserver": {
+      "title": "SQL Server 数据库节点",
+      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。",
+      "fields": [
+        {
+          "key": "connection",
+          "label": "连接数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从已创建的数据源中选择，无需手填连接串"
+        },
+        {
+          "key": "operation",
+          "label": "操作类型",
+          "type": "select",
+          "options": [
+            "select",
+            "insert",
+            "update",
+            "delete",
+            "execute"
+          ],
+          "default": "select",
+          "required": true,
+          "hint": "SELECT / INSERT / UPDATE / DELETE / 执行原始 SQL"
+        },
+        {
+          "key": "table",
+          "label": "数据表",
+          "type": "text",
+          "placeholder": "schema.table",
+          "required": true,
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "columns",
+          "label": "字段列表",
+          "type": "text",
+          "placeholder": "id, order_no, updated_at",
+          "hint": "SELECT / INSERT 使用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "where",
+          "label": "WHERE 条件",
+          "type": "text",
+          "placeholder": "synced = 0 AND updated_at > {{ $now.minus(5, \"minutes\") }}",
+          "hint": "参数可用 {{ $vars.xxx }} 引用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select",
+              "update",
+              "delete"
+            ]
+          }
+        },
+        {
+          "key": "values",
+          "label": "写入值 (JSON)",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "{\"order_no\": \"SO-2026-001\"}",
+          "hint": "INSERT 的字段值 / UPDATE 的 SET 值",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert",
+              "update"
+            ]
+          }
+        },
+        {
+          "key": "sql",
+          "label": "自定义 SQL",
+          "type": "textarea",
+          "rows": 5,
+          "placeholder": "SELECT ... FROM ... WHERE ...",
+          "hint": "仅“执行原始 SQL”时启用",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "execute"
+            ]
+          }
+        },
+        {
+          "key": "limit",
+          "label": "最大返回行数",
+          "type": "number",
+          "placeholder": "500",
+          "default": "500",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "select"
+            ]
+          }
+        },
+        {
+          "key": "conflict",
+          "label": "冲突处理",
+          "type": "text",
+          "placeholder": "ON CONFLICT (id) DO NOTHING",
+          "hint": "可选，留空则使用默认策略",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insert"
+            ]
+          }
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "30000ms",
+          "default": "30000ms"
+        }
+      ]
+    },
+    "source:mongodb": {
+      "title": "MongoDB 节点",
+      "note": "查询条件与更新内容使用 JSON 格式。",
+      "fields": [
+        {
+          "key": "connection",
+          "label": "连接数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择已配置的 MongoDB 连接"
+        },
+        {
+          "key": "operation",
+          "label": "操作类型",
+          "type": "select",
+          "options": [
+            "find",
+            "insertOne",
+            "insertMany",
+            "updateMany",
+            "deleteMany",
+            "aggregate"
+          ],
+          "default": "find"
+        },
+        {
+          "key": "collection",
+          "label": "集合",
+          "type": "text",
+          "placeholder": "plant.events",
+          "required": true
+        },
+        {
+          "key": "filter",
+          "label": "查询条件 (JSON)",
+          "type": "textarea",
+          "rows": 3,
+          "placeholder": "{\"status\": \"new\"}"
+        },
+        {
+          "key": "documents",
+          "label": "写入文档 (JSON)",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "[{\"name\": \"PT101\"}]",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "insertOne",
+              "insertMany"
+            ]
+          }
+        },
+        {
+          "key": "update",
+          "label": "更新内容 (JSON)",
+          "type": "textarea",
+          "rows": 3,
+          "placeholder": "{\"$set\": {\"status\": \"done\"}}",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "updateMany"
+            ]
+          }
+        },
+        {
+          "key": "pipeline",
+          "label": "聚合管道 (JSON)",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "[{\"$match\": {}}]",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "aggregate"
+            ]
+          }
+        },
+        {
+          "key": "limit",
+          "label": "最大返回条数",
+          "type": "number",
+          "placeholder": "100",
+          "default": "100"
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "30000ms",
+          "default": "30000ms"
+        }
+      ]
+    },
+    "code:nodejs": {
+      "title": "Node.js 代码节点",
+      "note": "生产环境在独立进程/容器中执行，配置模块白名单与资源上限。可用 $input / $json / $vars / $env。",
+      "fields": [
+        {
+          "key": "code",
+          "label": "脚本",
+          "type": "code",
+          "required": true
+        },
+        {
+          "key": "timeout",
+          "label": "任务超时",
+          "type": "text",
+          "placeholder": "300s",
+          "default": "300s"
+        },
+        {
+          "key": "memoryLimit",
+          "label": "内存上限",
+          "type": "select",
+          "options": [
+            "128MB",
+            "256MB",
+            "512MB"
+          ],
+          "default": "256MB"
+        },
+        {
+          "key": "allowedModules",
+          "label": "允许模块（白名单）",
+          "type": "text",
+          "placeholder": "lodash, dayjs",
+          "hint": "逗号分隔；内置模块也需显式授权"
+        },
+        {
+          "key": "inputMode",
+          "label": "输入模式",
+          "type": "select",
+          "options": [
+            "逐条执行",
+            "整批执行"
+          ],
+          "default": "整批执行"
+        },
+        {
+          "key": "retry",
+          "label": "失败重试次数",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "default": "0"
+        }
+      ]
+    },
+    "code:python": {
+      "title": "Python 代码节点",
+      "note": "生产环境在独立 Python 进程中执行；使用 _items 读取输入，返回列表作为输出。",
+      "fields": [
+        {
+          "key": "code",
+          "label": "脚本",
+          "type": "code",
+          "required": true
+        },
+        {
+          "key": "timeout",
+          "label": "任务超时",
+          "type": "text",
+          "placeholder": "300s",
+          "default": "300s"
+        },
+        {
+          "key": "memoryLimit",
+          "label": "内存上限",
+          "type": "select",
+          "options": [
+            "128MB",
+            "256MB",
+            "512MB"
+          ],
+          "default": "256MB"
+        },
+        {
+          "key": "allowedModules",
+          "label": "允许第三方库",
+          "type": "text",
+          "placeholder": "numpy, requests",
+          "hint": "逗号分隔；标准库白名单由服务端配置"
+        },
+        {
+          "key": "inputMode",
+          "label": "输入模式",
+          "type": "select",
+          "options": [
+            "逐条执行",
+            "整批执行"
+          ],
+          "default": "整批执行"
+        },
+        {
+          "key": "retry",
+          "label": "失败重试次数",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "default": "0"
+        }
+      ]
+    },
+    "logic:condition": {
+      "title": "条件分支节点",
+      "note": "根据表达式结果将数据分流到 true / false 端口。",
+      "fields": [
+        {
+          "key": "expression",
+          "label": "条件表达式",
+          "type": "text",
+          "placeholder": "{{ $json.temp > $vars.TEMP_THRESHOLD }}",
+          "required": true
+        },
+        {
+          "key": "mode",
+          "label": "分支模式",
+          "type": "select",
+          "options": [
+            "二分支 (true/false)",
+            "多分支 (Switch)"
+          ],
+          "default": "二分支 (true/false)"
+        },
+        {
+          "key": "unmatched",
+          "label": "未匹配处理",
+          "type": "select",
+          "options": [
+            "丢弃",
+            "走默认分支"
+          ],
+          "default": "丢弃"
+        },
+        {
+          "key": "desc",
+          "label": "说明",
+          "type": "text",
+          "placeholder": "温度超阈值时进入告警分支"
+        }
+      ]
+    },
+    "logic:filter": {
+      "title": "数据过滤节点",
+      "note": "仅保留满足表达式的数据项。",
+      "fields": [
+        {
+          "key": "expression",
+          "label": "过滤表达式",
+          "type": "text",
+          "placeholder": "{{ $json.quality === \"GOOD\" }}",
+          "required": true
+        },
+        {
+          "key": "maxItems",
+          "label": "最大保留条数",
+          "type": "number",
+          "placeholder": "1000",
+          "default": "1000"
+        },
+        {
+          "key": "desc",
+          "label": "说明",
+          "type": "text",
+          "placeholder": "过滤无效质量戳"
+        }
+      ]
+    },
+    "logic:merge": {
+      "title": "数据合并节点",
+      "note": "将多路输入合并为单一输出。",
+      "fields": [
+        {
+          "key": "strategy",
+          "label": "合并策略",
+          "type": "select",
+          "options": [
+            "追加",
+            "按字段合并",
+            "覆盖"
+          ],
+          "default": "追加"
+        },
+        {
+          "key": "matchField",
+          "label": "匹配字段",
+          "type": "text",
+          "placeholder": "device_id",
+          "showWhen": {
+            "key": "strategy",
+            "in": [
+              "按字段合并"
+            ]
+          }
+        },
+        {
+          "key": "dedupe",
+          "label": "去重",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "否"
+        },
+        {
+          "key": "maxItems",
+          "label": "最大条数",
+          "type": "number",
+          "placeholder": "5000",
+          "default": "5000"
+        }
+      ]
+    },
+    "logic:delay": {
+      "title": "延时等待节点",
+      "note": "用于错峰写入或等待上游设备就绪。",
+      "fields": [
+        {
+          "key": "duration",
+          "label": "延时时长",
+          "type": "number",
+          "placeholder": "5",
+          "required": true
+        },
+        {
+          "key": "unit",
+          "label": "单位",
+          "type": "select",
+          "options": [
+            "毫秒",
+            "秒",
+            "分钟"
+          ],
+          "default": "秒"
+        },
+        {
+          "key": "blockDownstream",
+          "label": "阻塞下游",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "是"
+        },
+        {
+          "key": "desc",
+          "label": "说明",
+          "type": "text",
+          "placeholder": "等待 PLC 数据就绪"
+        }
+      ]
+    },
+    "output:timeseries": {
+      "title": "写入时序库节点",
+      "note": "建议批量写入并指定时间字段与标签字段。",
+      "fields": [
+        {
+          "key": "connection",
+          "label": "目标数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择，不再手填 DS ID"
+        },
+        {
+          "key": "table",
+          "label": "表 / 测量",
+          "type": "text",
+          "placeholder": "plant_a.telemetry",
+          "required": true
+        },
+        {
+          "key": "writeMode",
+          "label": "写入模式",
+          "type": "select",
+          "options": [
+            "追加",
+            "覆盖",
+            "UPSERT"
+          ],
+          "default": "追加"
+        },
+        {
+          "key": "batchSize",
+          "label": "批量大小",
+          "type": "number",
+          "placeholder": "500",
+          "default": "500"
+        },
+        {
+          "key": "timeField",
+          "label": "时间字段",
+          "type": "text",
+          "placeholder": "ts",
+          "default": "ts"
+        },
+        {
+          "key": "tagFields",
+          "label": "标签字段",
+          "type": "text",
+          "placeholder": "device_id, tag",
+          "hint": "逗号分隔"
+        },
+        {
+          "key": "outOfOrder",
+          "label": "乱序数据处理",
+          "type": "select",
+          "options": [
+            "丢弃",
+            "缓冲重排"
+          ],
+          "default": "丢弃"
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "10000ms",
+          "default": "10000ms"
+        }
+      ]
+    },
+    "output:http": {
+      "title": "HTTP 推送节点",
+      "note": "失败时按配置重试；请求体支持 {{ $json.xxx }} 模板变量。",
+      "fields": [
+        {
+          "key": "method",
+          "label": "请求方法",
+          "type": "select",
+          "options": [
+            "POST",
+            "PUT",
+            "PATCH",
+            "GET"
+          ],
+          "default": "POST"
+        },
+        {
+          "key": "url",
+          "label": "目标地址",
+          "type": "text",
+          "placeholder": "https://mes.factory.local/api/v1/oee",
+          "required": true
+        },
+        {
+          "key": "auth",
+          "label": "认证凭据",
+          "type": "credential",
+          "hint": "从变量配置 → 凭据中选择"
+        },
+        {
+          "key": "bodyTemplate",
+          "label": "请求体模板",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "{\"value\": \"{{ $json.oee }}\"}"
+        },
+        {
+          "key": "retry",
+          "label": "失败重试次数",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "default": "2"
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "10000ms",
+          "default": "10000ms"
+        },
+        {
+          "key": "successCodes",
+          "label": "成功状态码",
+          "type": "text",
+          "placeholder": "200,201",
+          "default": "200,201"
+        }
+      ]
+    },
+    "output:feishu_bitable": {
+      "title": "飞书多维表格节点",
+      "note": "通过飞书开放平台「多维表格」API 写入记录；需先在变量配置中创建 App ID / App Secret 凭据。",
+      "fields": [
+        {
+          "key": "credential",
+          "label": "飞书应用凭据",
+          "type": "credential",
+          "required": true,
+          "hint": "下拉选择已建的飞书应用凭据（App ID / App Secret）"
+        },
+        {
+          "key": "appToken",
+          "label": "多维表格 App Token",
+          "type": "text",
+          "placeholder": "bascnCMII2O...",
+          "required": true,
+          "hint": "打开多维表格后，URL 中 /base/ 后面的一段"
+        },
+        {
+          "key": "tableId",
+          "label": "数据表 ID (table_id)",
+          "type": "text",
+          "placeholder": "tblsRc9GRRXKqhvW",
+          "required": true,
+          "hint": "以 tbl 开头，可在表格 URL 或 API 中获取"
+        },
+        {
+          "key": "operation",
+          "label": "操作类型",
+          "type": "select",
+          "options": [
+            "新增记录",
+            "更新记录",
+            "查询记录",
+            "删除记录"
+          ],
+          "default": "新增记录",
+          "required": true
+        },
+        {
+          "key": "viewId",
+          "label": "视图 ID",
+          "type": "text",
+          "placeholder": "vewXXXXXX（可选）",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "查询记录"
+            ]
+          }
+        },
+        {
+          "key": "filter",
+          "label": "筛选条件",
+          "type": "text",
+          "placeholder": "当前温度>85",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "查询记录"
+            ]
+          }
+        },
+        {
+          "key": "matchField",
+          "label": "匹配字段",
+          "type": "text",
+          "placeholder": "设备编号",
+          "hint": "按该字段定位要更新的记录",
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "更新记录",
+              "删除记录"
+            ]
+          }
+        },
+        {
+          "key": "fieldMapping",
+          "label": "字段映射 (JSON)",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "{\"设备编号\": \"{{ $json.device }}\", \"温度\": \"{{ $json.temp }}\"}",
+          "hint": "左侧为多维表格字段名，右侧可用 {{ $json.xxx }} 模板变量",
+          "required": true,
+          "showWhen": {
+            "key": "operation",
+            "in": [
+              "新增记录",
+              "更新记录"
+            ]
+          }
+        },
+        {
+          "key": "batchSize",
+          "label": "批量大小",
+          "type": "number",
+          "placeholder": "100",
+          "default": "100",
+          "hint": "飞书接口单次上限 1000 条"
+        },
+        {
+          "key": "retry",
+          "label": "失败重试次数",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "default": "2"
+        },
+        {
+          "key": "timeout",
+          "label": "超时时间",
+          "type": "text",
+          "placeholder": "10000ms",
+          "default": "10000ms"
+        }
+      ]
+    },
+    "output:alert": {
+      "title": "告警通知节点",
+      "note": "支持重复告警抑制，避免刷屏。",
+      "fields": [
+        {
+          "key": "channel",
+          "label": "告警渠道",
+          "type": "select",
+          "options": [
+            "企业微信",
+            "钉钉",
+            "邮件",
+            "Webhook"
+          ],
+          "default": "企业微信"
+        },
+        {
+          "key": "credential",
+          "label": "通知凭据",
+          "type": "credential",
+          "hint": "可选，从变量配置 → 凭据中选择"
+        },
+        {
+          "key": "webhook",
+          "label": "Webhook / 收件人",
+          "type": "text",
+          "placeholder": "https://qyapi.weixin.qq.com/... 或 ops@factory.local"
+        },
+        {
+          "key": "titleTemplate",
+          "label": "标题模板",
+          "type": "text",
+          "placeholder": "【告警】{{ $json.device }} 温度过高"
+        },
+        {
+          "key": "messageTemplate",
+          "label": "消息模板",
+          "type": "textarea",
+          "rows": 4,
+          "placeholder": "设备：{{ $json.device }}\n当前温度：{{ $json.temp }}℃"
+        },
+        {
+          "key": "severity",
+          "label": "严重级别",
+          "type": "select",
+          "options": [
+            "严重",
+            "警告",
+            "提醒"
+          ],
+          "default": "警告"
+        },
+        {
+          "key": "suppressMinutes",
+          "label": "重复抑制（分钟）",
+          "type": "number",
+          "placeholder": "10",
+          "default": "10"
+        }
+      ]
+    }
+  },
+  "theme": {
+    "trigger": {
+      "color": "#D97706",
+      "soft": "#FEF3C7",
+      "icon": "clock"
+    },
+    "source": {
+      "color": "#0F766E",
+      "soft": "#CCFBF1",
+      "icon": "cpu"
+    },
+    "code": {
+      "color": "#7C3AED",
+      "soft": "#F3E8FF",
+      "icon": "code"
+    },
+    "logic": {
+      "color": "#D97706",
+      "soft": "#FEF3C7",
+      "icon": "branch"
+    },
+    "output": {
+      "color": "#059669",
+      "soft": "#D1FAE5",
+      "icon": "database"
+    }
+  },
+  "market": [
+    {
+      "key": "pkg-redis",
+      "type": "output",
+      "subtype": "redis",
+      "title": "Redis 写入",
+      "icon": "layers",
+      "color": "green",
+      "desc": "将采集结果写入 Redis List / Stream",
+      "author": "TongLink 官方",
+      "version": "1.2.0",
+      "schema": {
+        "title": "Redis 写入节点",
+        "note": "安装后即可在节点库使用；凭据请选择已配置的 Redis 密码。",
+        "fields": [
+          {
+            "key": "credential",
+            "label": "Redis 凭据",
+            "type": "credential",
+            "required": true
+          },
+          {
+            "key": "keyPattern",
+            "label": "Key 模板",
+            "type": "text",
+            "placeholder": "plant:{tag}:{date}",
+            "required": true
+          },
+          {
+            "key": "dataType",
+            "label": "写入结构",
+            "type": "select",
+            "options": [
+              "List",
+              "Stream",
+              "String"
+            ],
+            "default": "List"
+          },
+          {
+            "key": "ttl",
+            "label": "过期时间（秒）",
+            "type": "number",
+            "placeholder": "3600"
+          }
+        ]
+      }
+    },
+    {
+      "key": "pkg-influxdb",
+      "type": "output",
+      "subtype": "influxdb",
+      "title": "InfluxDB 写入",
+      "icon": "database",
+      "color": "green",
+      "desc": "按measurement与tag写入时序数据",
+      "author": "社区贡献 · factory-io",
+      "version": "0.9.3",
+      "schema": {
+        "title": "InfluxDB 写入节点",
+        "note": "支持行协议批量写入，需选择已建数据源。",
+        "fields": [
+          {
+            "key": "datasource",
+            "label": "数据源",
+            "type": "datasource",
+            "required": true
+          },
+          {
+            "key": "measurement",
+            "label": "Measurement",
+            "type": "text",
+            "placeholder": "telemetry",
+            "required": true
+          },
+          {
+            "key": "tags",
+            "label": "Tag 字段",
+            "type": "text",
+            "placeholder": "device_id, tag"
+          },
+          {
+            "key": "batchSize",
+            "label": "批量大小",
+            "type": "number",
+            "default": "500"
+          }
+        ]
+      }
+    },
+    {
+      "key": "pkg-wecom",
+      "type": "output",
+      "subtype": "wecom",
+      "title": "企业微信机器人",
+      "icon": "webhook",
+      "color": "green",
+      "desc": "推送文本/Markdown 消息到群机器人",
+      "author": "社区贡献 · ops-lab",
+      "version": "1.0.1",
+      "schema": {
+        "title": "企业微信机器人节点",
+        "note": "Webhook 地址建议存入凭据后下拉选择。",
+        "fields": [
+          {
+            "key": "credential",
+            "label": "机器人凭据",
+            "type": "credential",
+            "required": true
+          },
+          {
+            "key": "msgType",
+            "label": "消息类型",
+            "type": "select",
+            "options": [
+              "text",
+              "markdown"
+            ],
+            "default": "markdown"
+          },
+          {
+            "key": "content",
+            "label": "消息模板",
+            "type": "textarea",
+            "rows": 3,
+            "placeholder": "设备 {{ $json.device }} 告警"
+          }
+        ]
+      }
+    }
+  ]
+}

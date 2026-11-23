@@ -1,0 +1,80 @@
+# TongLink Studio 默认配置：轻量模式（单容器 / 单进程）
+spring:
+  application:
+    name: tonglink-studio
+  datasource:
+    url: jdbc:sqlite:${TONGLINK_DB_PATH:./data/tonglink.db}
+    driver-class-name: org.sqlite.JDBC
+    username: sa
+    password: ""
+    hikari:
+      maximum-pool-size: 5
+      connection-test-query: SELECT 1
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      continue-on-error: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  mvc:
+    static-path-pattern: /**
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+tonglink:
+  # AES-GCM 主密钥，生产必须通过环境变量覆盖
+  crypto:
+    key: ${TONGLINK_CRYPTO_KEY:tonglink-studio-dev-key-change-me}
+  jwt:
+    secret: ${TONGLINK_JWT_SECRET:tonglink-studio-local-jwt-secret-must-be-long-enough}
+    ttl-seconds: 86400
+  # inmemory = 轻量/标准模式；redis = 队列模式
+  queue:
+    type: ${TONGLINK_QUEUE_TYPE:inmemory}
+  redis:
+    uri: ${TONGLINK_REDIS_URI:redis://localhost:6379}
+  scheduler:
+    interval-ms: 5000
+  runner:
+    node-command: ${TONGLINK_NODE_CMD:node}
+    python-command: ${TONGLINK_PYTHON_CMD:python3}
+    python-fallback: ${TONGLINK_PYTHON_FALLBACK:python}
+  # 外网代理：IDEA 启动时若未继承 shell 的代理变量，可在这里或环境变量里指定
+  http:
+    proxy: ${TONGLINK_HTTP_PROXY:${HTTPS_PROXY:${https_proxy:${HTTP_PROXY:${http_proxy:}}}}}
+  # 内置「测试」项目使用的 MySQL 测试库，可用环境变量覆盖
+  test:
+    mysql:
+      jdbc-url: ${TONGLINK_TEST_MYSQL_JDBC_URL:jdbc:mysql://127.0.0.1:3306/weather?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&connectTimeout=5000}
+      username: ${TONGLINK_TEST_MYSQL_USERNAME:root}
+      password: ${TONGLINK_TEST_MYSQL_PASSWORD:change-me}
+  ai:
+    provider: ${TONGLINK_AI_PROVIDER:local}
+    endpoint: ${TONGLINK_AI_ENDPOINT:}
+    api-key: ${TONGLINK_AI_API_KEY:}
+    model: ${TONGLINK_AI_MODEL:gpt-4o-mini}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    cn.tonglink: INFO

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>cn.tonglink</groupId><artifactId>tonglink-studio</artifactId><version>0.1.0</version></parent>
+  <artifactId>tonglink-connector</artifactId>
+  <name>tonglink-connector</name>
+  <description>节点执行器：OT/IT 协议、逻辑与输出适配器</description>
+  <dependencies>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-datasource</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-taskrunner</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>org.eclipse.paho</groupId><artifactId>org.eclipse.paho.client.mqttv3</artifactId><version>1.2.5</version></dependency>
+    <!-- 测试项目「深圳天气写入 MySQL」需要真实 JDBC 驱动；未填地址时执行器会降级为模拟写入 -->
+    <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><version>9.2.0</version><scope>runtime</scope></dependency>
+  </dependencies>
+</project>

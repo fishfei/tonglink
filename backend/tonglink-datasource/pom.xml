@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>cn.tonglink</groupId><artifactId>tonglink-studio</artifactId><version>0.1.0</version></parent>
+  <artifactId>tonglink-datasource</artifactId>
+  <name>tonglink-datasource</name>
+  <description>数据源管理、连通性测试与协议元数据</description>
+  <dependencies>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-security</artifactId><version>${project.version}</version></dependency>
+  </dependencies>
+</project>

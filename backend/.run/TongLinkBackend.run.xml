@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <!--
+    共享运行配置（IDEA 2020.1+ 会自动识别 .run 目录下的配置）。
+    打开 backend 目录后，右上角运行下拉框里直接就有这一项。
+    工作目录设为 tonglink-app，SQLite 会落在 tonglink-app/data/tonglink.db，
+    和命令行 java -jar 的行为保持一致。
+  -->
+  <configuration default="false" name="TongLink 后端 (8080)" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="cn.tonglink.app.TongLinkApplication" />
+    <module name="tonglink-app" />
+    <option name="VM_PARAMETERS" value="-Dfile.encoding=UTF-8" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tonglink-app" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
