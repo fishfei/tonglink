@@ -55,7 +55,7 @@ public class FlowRepository {
     private final JdbcTemplate jdbc;
 
     public FlowRepository(JdbcTemplate jdbc) {
-        SqliteSchemaMigration.ensure(jdbc);
+        SchemaMigration.ensure(jdbc);
         this.jdbc = jdbc;
     }
 

@@ -4,7 +4,7 @@
 >
 > 设计依据见 [`ARCHITECTURE.md`](ARCHITECTURE.md) 第 1.2 节与第 7 节。
 >
-> **首版交付说明**：本次随代码产出的镜像 `dist/tonglink-studio-lite.tar` 是**轻量 lite 模式**（单容器 / SQLite / 进程内队列 / 内部 Runner），配套 `docker/docker-compose.lite.yml` 与 `scripts/deploy-lite.sh`，可直接部署。第 5～7 节的标准模式（PostgreSQL）、队列模式（Redis）、外部 Runner 属于架构规划目标，其 compose 示例用于说明扩展方式，首版镜像默认不含这些外部组件的驱动与配置，启用前需按架构文档补充依赖。环境变量名以第 8 节为准。
+> **模式可用性与镜像说明**：随代码产出的镜像 `dist/tonglink-studio-lite.tar` 默认以**轻量 lite 模式**启动（单容器 / SQLite / 进程内队列 / 内部 Runner），配套 `docker/docker-compose.lite.yml` 与 `scripts/deploy-lite.sh`。**PostgreSQL 已实际接通**：同一份 jar 内含 SQLite 与 PostgreSQL 两种 JDBC 驱动，通过 `DB_URL` 前缀自动切换，配套 `docker/docker-compose.postgres.yml` 可直接编排标准模式（已用真实 PostgreSQL 17 验证建表、读写与分页）。队列模式（Redis）、外部 Runner 仍属架构扩展目标，其 compose 示例用于说明扩展方式。环境变量名以第 8 节为准。
 
 ---
 
@@ -88,59 +88,36 @@ docker run -d --name tonglink-studio \
 - 代码节点由应用拉起的 Node.js / Python 子进程执行，不需要 runner 容器。
 - 适合单用户或少量流程；并发写入较多时 SQLite 会成为瓶颈，请切换到标准模式。
 
-## 5. 标准模式（2 个容器）
+## 5. 标准模式（2 个容器，PostgreSQL）
+
+标准模式已实际接通并验证，直接使用随仓库提供的编排文件 `docker/docker-compose.postgres.yml`。
 
 在仓库根目录准备 `.env`：
 
 ```bash
 DB_PASSWORD=替换为数据库密码
+DB_USER=tonglink
+DB_NAME=tonglink
+DB_POOL_SIZE=20
 TONGLINK_JWT_SECRET=替换为你的JWT密钥
 TONGLINK_CRYPTO_KEY=替换为你的主密钥
 TZ=Asia/Shanghai
 ```
 
-`docker-compose.yml` 内容：
+启动：
 
-```yaml
-services:
-  postgres:
-    image: timescale/timescaledb:latest-pg16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: tonglink
-      POSTGRES_USER: tonglink
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tonglink -d tonglink"]
-      interval: 10s
-      retries: 5
-
-  app:
-    image: tonglink-studio:0.1.0
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    env_file: .env
-    environment:
-      SPRING_PROFILES_ACTIVE: standard
-      DB_TYPE: postgres
-      DB_URL: jdbc:postgresql://postgres:5432/tonglink
-      DB_USER: tonglink
-      DB_PASSWORD: ${DB_PASSWORD}
-      QUEUE_TYPE: local
-      STORAGE_DIR: /data/storage
-    volumes:
-      - app_data:/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-volumes:
-  pg_data:
-  app_data:
+```bash
+docker compose -f docker/docker-compose.postgres.yml up -d
 ```
+
+**切换原理**：应用只有一份 jar，内含 SQLite 与 PostgreSQL 两套 JDBC 驱动。数据源完全由环境变量决定——`DB_URL` 是唯一开关：
+
+- 不设 `DB_URL`：默认 `jdbc:sqlite:./data/tonglink.db`（轻量模式）
+- 设 `DB_URL=jdbc:postgresql://host:5432/db`：Spring Boot 依据 URL 前缀自动选择 PG 驱动，无需重新打包
+
+配套变量：`DB_USER`、`DB_PASSWORD`、`DB_POOL_SIZE`（连接池大小，默认 5，PG 模式建议 20）。表结构由 `schema.sql` 在首次启动时自动创建（15 张表，SQLite/PG 通用），增量升级由跨库迁移逻辑处理，无需手工执行 DDL。
+
+> 注意：旧版文档中出现的 `DB_TYPE`、`QUEUE_TYPE`、`STORAGE_DIR` 变量已被废弃，代码从未读取，请勿再使用。
 
 启动：
 
@@ -155,6 +132,8 @@ docker compose logs -f app
 ## 6. 队列模式（4+ 容器）
 
 当出现以下情况时切换：执行任务堆积、定时触发互相阻塞、需要独立扩容执行能力、需要外部 Runner 隔离。
+
+> 规划提示：队列模式（Redis + 多 Worker + 外部 Runner）仍属架构扩展目标，下方 compose 仅示意扩展方式，**当前镜像不能直接照搬运行**。数据库切换沿用第 5 节的 `DB_URL` 机制，队列相关变量（`QUEUE_TYPE` 等）当前版本不读取。需要高并发部署时请先按架构文档补齐对应实现。
 
 `docker-compose.queue.yml` 内容（独立文件，不要与标准模式同时启动）：
 
@@ -281,9 +260,13 @@ RUNNER_BROKER_PORT=5679
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `SPRING_PROFILES_ACTIVE` | `lite` | Spring 配置档位；轻量模式用 `lite` |
+| `SPRING_PROFILES_ACTIVE` | `lite` | Spring 配置档位；轻量模式用 `lite`，标准模式用 `standard` |
 | `SERVER_PORT` | `8080` | HTTP 与 WebSocket 共用端口 |
-| `TONGLINK_DB_PATH` | `./data/tonglink.db` | SQLite 数据库路径；容器内设为 `/app/data/tonglink.db` |
+| `DB_URL` | 空 | **数据库开关**。留空用 SQLite；设为 `jdbc:postgresql://host:5432/db` 使用 PostgreSQL（驱动自动选择） |
+| `DB_USER` | `sa` | 数据库用户名；PG 模式设为对应用户（如 `tonglink`） |
+| `DB_PASSWORD` | 空 | 数据库密码 |
+| `DB_POOL_SIZE` | `5` | Hikari 连接池大小；PG 模式建议 `20` |
+| `TONGLINK_DB_PATH` | `./data/tonglink.db` | 仅 SQLite 模式生效；容器内设为 `/app/data/tonglink.db` |
 | `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 凭据/变量 AES-GCM 主密钥，**生产必须修改** |
 | `TONGLINK_JWT_SECRET` | 开发用默认值 | JWT 签名密钥，**生产必须修改且足够长** |
 | `TONGLINK_QUEUE_TYPE` | `inmemory` | `inmemory`（轻量/标准）/ `redis`（队列模式） |
@@ -297,13 +280,14 @@ RUNNER_BROKER_PORT=5679
 | `TONGLINK_AI_MODEL` | `gpt-4o-mini` | AI 模型名 |
 | `TZ` | `Asia/Shanghai` | 容器时区，影响定时触发 |
 
-> 说明：架构文档中规划的标准模式（PostgreSQL）、队列模式（Redis）、外部 Runner、OTel 链路追踪等能力，其对应配置在首版工程中以 `application.yml` 现有键为准；上表未列出的规划项尚未接入镜像默认配置，部署时请以本表为准。
+> 说明：队列模式（Redis）、外部 Runner、OTel 链路追踪仍属架构扩展目标，尚未接入镜像默认配置；PostgreSQL 标准模式已实际可用，按第 5 节操作即可。
 
 ## 9. 数据库与迁移
 
-- 首次启动时 Flyway 自动建表；升级时自动执行增量迁移脚本。
-- 从 lite 迁移到 standard：在 lite 中使用「数据源/流程导出」备份 JSON，启动 standard 后逐项导入；凭据需要在新环境重新录入（主密钥不同）。
-- 从 standard 升级到 queue：数据库不变，只切换 profile 并增加 Redis 与 Worker，无需数据迁移。
+- **自动建表**：首次启动时由 Spring 的 `schema.sql` 创建 15 张表（SQLite / PostgreSQL 通用 DDL），无需手工执行 SQL 或依赖 Flyway。
+- **增量升级**：Repository 启动时执行跨库迁移（`SchemaMigration`，通过 JDBC 元数据判断列是否存在后补列），老库升级不会因重复 ALTER 失败。
+- **从 lite 迁移到 standard**：在 lite 中使用「数据源/流程导出」备份 JSON，启动 standard 后逐项导入；凭据需要在新环境重新录入（主密钥不同）。
+- **从 standard 升级到 queue**：数据库不变，只切换 profile 并增加 Redis 与 Worker，无需数据迁移。
 - 执行日志与指标按保留策略自动裁剪（默认 30 天热数据），避免无限增长。
 
 ## 10. 备份与恢复

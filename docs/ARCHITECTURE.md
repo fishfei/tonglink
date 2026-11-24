@@ -113,10 +113,10 @@ flowchart TB
 
 说明：
 
-- 轻量模式使用 SQLite 存元数据与执行记录；标准/队列模式使用 PostgreSQL 16 + TimescaleDB。两者通过 `storage` 抽象层屏蔽差异，Flyway 分别维护迁移脚本。SQLite 下不建 hypertable，改用普通表 + 定时清理。
+- 轻量模式使用 SQLite，标准/队列模式使用 PostgreSQL（可叠加 TimescaleDB）。**实际实现**：同一份 jar 内含两套 JDBC 驱动，由 `DB_URL` 前缀自动选择；Repository 层用 JdbcTemplate 手写通用 SQL 屏蔽方言差异，建表由 `schema.sql`（通用 DDL）完成，增量升级由跨库 `SchemaMigration` 通过 JDBC 元数据判断列是否存在后补列。TimescaleDB hypertable / 连续聚合属于可选增强，非必需；标准模式用原生 PostgreSQL 16 即可运行。
 - 轻量/标准模式不需要 Redis：执行队列是进程内的 `ExecutionQueue` 实现；只有队列模式才启用 Redis Stream 版本。
 - Task Runner 默认是应用拉起的**子进程**（n8n 的 internal mode），因此单容器即可执行 Node.js/Python 代码；只有需要更强隔离时才启用外部 `runners` 容器（n8n 的 external mode）。
-- 从轻量模式迁移到标准模式只需导出/导入数据并切换 `SPRING_PROFILES_ACTIVE`，业务代码不变。
+- 从轻量模式迁移到标准模式只需导出/导入数据并设置 `DB_URL`（指向 PostgreSQL），业务代码不变；数据库驱动依据 URL 前缀自动切换。
 
 ### 1.3 技术栈总表
 

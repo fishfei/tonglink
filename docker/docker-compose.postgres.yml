@@ -1,0 +1,53 @@
+# PostgreSQL 标准模式：app + PostgreSQL 16（2 个容器）
+# 使用前提：
+#   1) 先构建包含 PG 驱动的镜像（后端 pom 已含 org.postgresql:postgresql）；
+#   2) 若使用现成的 lite 镜像 tar，其内部已打包 PG 驱动，可直接复用；
+#   3) 通过 .env 或环境变量设置 DB_PASSWORD 等敏感项。
+#
+# 启动：docker compose -f docker/docker-compose.postgres.yml up -d
+# 说明：同一份 jar 靠 DB_URL 前缀自动切换数据库，不需要为 PG 重新打包。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tonglink-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-tonglink}
+      POSTGRES_USER: ${DB_USER:-tonglink}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tonglink} -d ${DB_NAME:-tonglink}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tonglink:
+    image: tonglink-studio:0.1.0
+    container_name: tonglink-studio
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: standard
+      # 关键：DB_URL 前缀决定驱动，jdbc:postgresql: 会自动使用 PG 驱动
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-tonglink}
+      DB_USER: ${DB_USER:-tonglink}
+      DB_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      TONGLINK_CRYPTO_KEY: ${TONGLINK_CRYPTO_KEY:?请设置 TONGLINK_CRYPTO_KEY}
+      TONGLINK_JWT_SECRET: ${TONGLINK_JWT_SECRET:?请设置 TONGLINK_JWT_SECRET}
+      TZ: Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/actuator/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pg-data:

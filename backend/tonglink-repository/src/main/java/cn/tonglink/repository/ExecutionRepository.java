@@ -62,7 +62,7 @@ public class ExecutionRepository {
     private final JdbcTemplate jdbc;
 
     public ExecutionRepository(JdbcTemplate jdbc) {
-        SqliteSchemaMigration.ensure(jdbc);
+        SchemaMigration.ensure(jdbc);
         this.jdbc = jdbc;
     }
 

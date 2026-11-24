@@ -35,7 +35,7 @@
 - **执行与可观测性**：DAG 拓扑执行，节点级输入 / 输出与耗时记录，服务端分页的执行日志、标签过滤、AI 失败诊断，WebSocket 实时状态推送。
 - **数据源 / 凭据 / 变量**：统一管理连接配置，凭据使用 AES-GCM 加密存储，变量支持项目级作用域。
 - **AI 助手**：默认本地规则引擎即可生成流程草稿、诊断执行失败、分析数据异常；可配置 OpenAI 兼容接口切换外部模型。
-- **轻量部署**：SQLite 开箱即用，单进程即可运行全部能力；同时提供 Docker 镜像构建脚本与多容器部署文档。
+- **双数据库持久化**：SQLite 开箱即用，也可切换 PostgreSQL 支撑团队与高并发场景；同一份 jar 靠 `DB_URL` 自动选择驱动，表结构与 SQL 双库通用。
 - **全中文界面**：面向国内工业现场，菜单、提示、日志与文档均为中文。
 
 ## 快速开始
@@ -56,6 +56,15 @@ java -jar target/tonglink-studio.jar
 ```
 
 后端默认监听 `http://localhost:8080`，首次启动会自动创建 SQLite 数据库（`./data/tonglink.db`）并初始化内置账号与测试项目。
+
+**切换到 PostgreSQL**（同一份 jar，无需重新打包）——只需设置数据库连接环境变量：
+
+```bash
+DB_URL="jdbc:postgresql://localhost:5432/tonglink" DB_USER=tonglink DB_PASSWORD=你的密码 \
+  java -jar target/tonglink-studio.jar
+```
+
+Spring Boot 会依据 `DB_URL` 前缀自动选择 PostgreSQL 驱动，首次启动自动建表（15 张，与 SQLite 通用）。容器编排见 `docker/docker-compose.postgres.yml`，完整说明见 [`DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 5 节。
 
 ### 前端
 
@@ -86,7 +95,7 @@ tonglink/
 ├── backend/           # Spring Boot 后端（14 个 Maven 模块）
 │   ├── tonglink-common/       公共工具
 │   ├── tonglink-model/        领域模型
-│   ├── tonglink-repository/   持久化（SQLite）
+│   ├── tonglink-repository/   持久化（SQLite / PostgreSQL）
 │   ├── tonglink-security/     认证、JWT、加密
 │   ├── tonglink-datasource/   数据源管理
 │   ├── tonglink-node/         节点定义与注册表
@@ -126,7 +135,7 @@ cd frontend && npm test
 
 ## 技术栈
 
-Java 21 · Spring Boot 3.5 · SQLite · JdbcTemplate · JWT · AES-GCM · Vue 3 · Vite 6 · TypeScript · Element Plus · @vue-flow/core · ECharts
+Java 21 · Spring Boot 3.5 · SQLite / PostgreSQL · JdbcTemplate · JWT · AES-GCM · Vue 3 · Vite 6 · TypeScript · Element Plus · @vue-flow/core · ECharts
 
 ## 开源协议
 

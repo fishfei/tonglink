@@ -1,14 +1,17 @@
-# TongLink Studio 默认配置：轻量模式（单容器 / 单进程）
+# TongLink Studio 默认配置：轻量模式（单容器 / 单进程 / SQLite）
+# 数据源完全由环境变量驱动，同一份 jar 可切换 SQLite / PostgreSQL：
+#   SQLite    （默认）：不设 DB_URL，使用 ./data/tonglink.db
+#   PostgreSQL：DB_URL=jdbc:postgresql://host:5432/tonglink DB_USER=... DB_PASSWORD=...
+# 不指定 driver-class-name，Spring Boot 会依据 URL 前缀自动选择 sqlite / postgresql 驱动。
 spring:
   application:
     name: tonglink-studio
   datasource:
-    url: jdbc:sqlite:${TONGLINK_DB_PATH:./data/tonglink.db}
-    driver-class-name: org.sqlite.JDBC
-    username: sa
-    password: ""
+    url: ${DB_URL:jdbc:sqlite:${TONGLINK_DB_PATH:./data/tonglink.db}}
+    username: ${DB_USER:sa}
+    password: ${DB_PASSWORD:}
     hikari:
-      maximum-pool-size: 5
+      maximum-pool-size: ${DB_POOL_SIZE:5}
       connection-test-query: SELECT 1
   sql:
     init:
