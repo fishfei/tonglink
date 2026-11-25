@@ -769,7 +769,7 @@ class IntegrationTest {
                         "position":{"x":0,"y":0},"config":{}},
                        {"id":"n2","type":"output","subtype":"alert","nodeVersion":"1","title":"邮件告警",
                         "position":{"x":220,"y":0},
-                        "config":{"channel":"邮件","credential":"%s","webhook":"java_fish@126.com",
+                        "config":{"channel":"邮件","credential":"%s","webhook":"recipient@example.com",
                                   "titleTemplate":"告警 {{ $json.flowId }}",
                                   "messageTemplate":"IT-ALERT-MARKER flow={{ $json.flowId }}",
                                   "severity":"严重","suppressMinutes":0}}
@@ -782,7 +782,7 @@ class IntegrationTest {
 
             assertThat(smtp.messages).hasSize(1);
             String mail = smtp.messages.get(0);
-            assertThat(mail).contains("To: java_fish@126.com");
+            assertThat(mail).contains("To: recipient@example.com");
             // Jakarta Mail 会按正文内容选择 base64 或 quoted-printable，两者中标记均为可读文本
             assertThat(mail).contains("IT-ALERT-MARKER");
         }

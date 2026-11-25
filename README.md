@@ -81,7 +81,7 @@ npm run dev
 
 | 账号 | 密码 | 角色 |
 |---|---|---|
-| admin | Admin@123 | 系统管理员（系统唯一账号） |
+| admin | 见登录页「管理员」一键填充（生产环境请立即修改） | 系统管理员（系统唯一账号） |
 
 > 生产环境请通过环境变量覆盖默认密钥（`TONGLINK_CRYPTO_KEY`、`TONGLINK_JWT_SECRET`），并修改 admin 口令。详见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)。
 

@@ -10,10 +10,12 @@
 同时创建/复用「测试用例」项目 P-TEST，并生成一个
 「深圳未来3天天气 → 飞书多维表格」的端到端流程。
 
-用法：python scripts/run_node_tests.py [--base http://localhost:8080]
+用法：ADMIN_PASSWORD=你的口令 python scripts/run_node_tests.py [--base http://localhost:8080]
+      或：python scripts/run_node_tests.py --password 你的口令 --base http://localhost:8080
 """
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -207,14 +209,19 @@ def main():
     global BASE, TOKEN
     parser = argparse.ArgumentParser()
     parser.add_argument('--base', default=BASE)
+    parser.add_argument('--password', default=os.environ.get('ADMIN_PASSWORD', ''),
+                        help='管理员口令，也可通过 ADMIN_PASSWORD 环境变量提供')
     args = parser.parse_args()
     BASE = args.base.rstrip('/')
     # 允许传 http://host:port 或完整的 .../api/v1 两种形式
     if not BASE.endswith('/api/v1'):
         BASE += '/api/v1'
 
-    # 内置账号口令在不同版本间调整过，依次尝试已知候选，取第一个能登录的
-    candidates = ['Qbeed@912', 'Admin@123', 'Ywo@499', 'Eng@123', 'Uzxs@755', 'View@123']
+    # 不在仓库中保存任何口令；由命令行参数或环境变量提供
+    candidates = [args.password] if args.password else []
+    if not candidates:
+        print('请通过 --password 或 ADMIN_PASSWORD 环境变量提供管理员口令')
+        return
     last_error = ''
     for password in candidates:
         login_req = urllib.request.Request(

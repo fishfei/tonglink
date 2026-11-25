@@ -139,7 +139,7 @@ class AlertExecutorTest {
 
             Map<String, Object> config = new LinkedHashMap<>();
             config.put("channel", "邮件");
-            config.put("webhook", "java_fish@126.com");
+            config.put("webhook", "recipient@example.com");
             config.put("titleTemplate", "Alert PT101");
             config.put("messageTemplate", "device=PT101 temp=95");
             config.put("severity", "警告");
@@ -150,7 +150,7 @@ class AlertExecutorTest {
             assertEquals("real", result.get("mode"));
             assertFalse(smtp.messages.isEmpty());
             String mail = smtp.messages.get(0);
-            assertTrue(mail.contains("To: java_fish@126.com"), mail);
+            assertTrue(mail.contains("To: recipient@example.com"), mail);
             // 主题按 MIME Q 编码，空格编码为下划线
             assertTrue(mail.contains("Alert_PT101"), mail);
             String encodedBody = mail.substring(mail.indexOf("Content-Transfer-Encoding: base64")
@@ -170,7 +170,7 @@ class AlertExecutorTest {
         StubSources sources = new StubSources();
         sources.set(Map.of("smtpHost", "127.0.0.1", "smtpPort", String.valueOf(closedPort),
                 "encryption", "无", "username", "", "password", "", "from", "alert@tonglink.test"));
-        Map<String, Object> config = Map.of("channel", "邮件", "webhook", "java_fish@126.com",
+        Map<String, Object> config = Map.of("channel", "邮件", "webhook", "recipient@example.com",
                 "suppressMinutes", 0);
         ApiException error = assertThrows(ApiException.class,
                 () -> run(executor(sources), config, List.of(Map.of("event", "trigger"))));

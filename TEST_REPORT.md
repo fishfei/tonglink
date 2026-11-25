@@ -2,6 +2,7 @@
 
 > 本报告记录首版（v0.1.0）在交付前的完整测试结果，覆盖后端 Maven 测试、前端单元测试、前端生产构建与轻量 Docker 镜像打包。
 > 所有测试均在本地 Windows 环境完成，命令与实际输出一致，可复现。
+> **隐私说明**：文中涉及的账号、口令、主机地址、库名、邮箱与数据源 ID 均已脱敏；截图中的敏感字段已遮盖。
 >
 > **v0.1.1 修复轮（2026-11-21 晚）**：根据用户启动测试反馈修复了三个交互缺陷（项目新建入口、节点属性配置、DAG 画布交互），详见第 9 节。修复后重新跑通全部测试并重建镜像。
 
@@ -169,7 +170,7 @@ bash scripts/deploy-lite.sh
 
 # 3. 访问
 # http://服务器IP:8080
-# 内置账号：admin / Admin@123
+# 内置账号：admin（口令见登录页「管理员」一键填充，生产环境请立即修改）
 ```
 
 `deploy-lite.sh` 会自动加载镜像、启动容器并跟随日志。数据通过 `tonglink-data` 卷持久化到 `/app/data`。生产环境请通过环境变量覆盖 `TONGLINK_CRYPTO_KEY` 与 `TONGLINK_JWT_SECRET`。
@@ -271,7 +272,7 @@ bash scripts/deploy-lite.sh
 | # | 问题 | 根因 | 修复 | 验证 |
 |---|---|---|---|---|
 | 1 | 点击测试连接后报错信息不消失，一直停留在页面 | 抽屉 `testDraft()` 使用 `ElMessage({duration: 0, showClose: true})`，每次点击都新增一条永不自动消失的提示并堆叠 | 统一管理单个消息句柄：每次测试先 `close()` 上一条；duration 改为 5 秒且可手动关闭；列表「测试」按钮也走同一逻辑；打开抽屉时清理旧提示 | 浏览器连点 3 次「测试连接」：成功与失败场景均只剩 1 条提示，5 秒后自动消失（count=0） |
-| 2 | 数据库连接测试不成功（用户提供 192.168.3.188:3306 / root / root@2025，未填库名） | `validateFields()` 强制要求「数据库名」，但该 MySQL 只需连接实例；请求在校验阶段就返回 422，根本没走到 JDBC | 库名改为可选（MySQL/PostgreSQL 允许只连实例），JDBC URL 允许不拼库名；Oracle/SQL Server 仍要求服务名 | 用户提供的参数走「保存前测试」直接返回 **JDBC 连接成功**；保存后「测试」同样成功，状态 connected |
+| 2 | 数据库连接测试不成功（用户提供测试库的主机、账号与口令，地址与凭据已脱敏，未填库名） | `validateFields()` 强制要求「数据库名」，但该 MySQL 只需连接实例；请求在校验阶段就返回 422，根本没走到 JDBC | 库名改为可选（MySQL/PostgreSQL 允许只连实例），JDBC URL 允许不拼库名；Oracle/SQL Server 仍要求服务名 | 用户提供的参数走「保存前测试」直接返回 **JDBC 连接成功**；保存后「测试」同样成功，状态 connected |
 | 3 | 编辑已有数据源后点「测试连接」仍失败 | 列表接口只回密码掩码 `******`，草稿测试把掩码当真密码发给 JDBC | 草稿请求带 `id`；后端用 `resolveMaskedSecrets()` 把掩码/空白密码替换为已保存的解密值，新填明文密码不被覆盖 | HTTP 冒烟：掩码密码 + id 返回 JDBC 连接成功；单元测试 2 项验证还原与明文优先；浏览器中编辑态测试成功 |
 
 ### 12.1 测试结果
@@ -281,10 +282,10 @@ bash scripts/deploy-lite.sh
 | 后端全量测试 | `mvn test`（14 模块 reactor） | **35 项全部通过**（新增 2 项数据源单测 + 1 项无库名回归断言），0 失败 / 0 错误 |
 | 前端类型检查 + 生产构建 | `npm run build` | 通过 |
 | 前端单元测试 | `npm test` | 3 项通过 |
-| 真实数据库冒烟 | 192.168.3.188:3306（用户提供的测试库） | TCP 可达；保存前测试、已保存测试均返回「JDBC 连接成功」 |
+| 真实数据库冒烟 | 用户提供的测试库（地址已脱敏） | TCP 可达；保存前测试、已保存测试均返回「JDBC 连接成功」 |
 | 浏览器实机验证 | Chrome CDP | 提示不堆叠、5 秒自动消失；编辑态掩码密码测试成功；`03-sources.png` 已重拍 |
 
-> 已在本地演示库创建数据源 `DS-01M882W8DRKYTJZ75VP1YPZHJS`（测试库-192.168.3.188），密码 AES-GCM 加密落库，接口只回掩码。
+> 已在本地演示库创建测试数据源（ID 与地址已脱敏），密码 AES-GCM 加密落库，接口只回掩码。
 
 ---
 
@@ -307,7 +308,7 @@ bash scripts/deploy-lite.sh
 | `FLOW-TEST-MQTT-RECV` | 测试-MQTT-触发器接收并输出 | 订阅 `tonglink.test.mqtt.push` → MQTT 触发器 → Node.js 节点 `return $input` | 收到推送流程消息，代码节点输出包含 `FLOW-TEST-MQTT-PUSH`，执行 SUCCESS |
 | `FLOW-TEST-PG` | 测试-PostgreSQL 查询 | 手动触发 → PostgreSQL 节点执行 `SELECT 1` | 执行 SUCCESS，输出 `ok=1, db=appdb` |
 
-> 三个数据源分别指向用户提供的 Kafka `192.168.3.188:9092`、MQTT `192.168.3.188:1883` 与 PostgreSQL `192.168.3.188:5432/appdb`；密码均 AES-GCM 加密落库，接口只回掩码。MQTT 的 WebSocket 端口 9001 已确认监听，但服务端 MQTT 客户端固定使用 TCP 1883。
+> 三个数据源分别指向用户提供的 Kafka、MQTT 与 PostgreSQL 服务（主机与库名已脱敏）；密码均 AES-GCM 加密落库，接口只回掩码。MQTT 的 WebSocket 端口 9001 已确认监听，但服务端 MQTT 客户端固定使用 TCP 1883。
 
 ### 13.2 测试结果
 
@@ -333,7 +334,7 @@ bash scripts/deploy-lite.sh
 
 | 验证项 | 结果 |
 |---|---|
-| 本地 SMTP 服务 + 真实 Jakarta Mail 投递 | 收件头 `To: java_fish@126.com`，正文含 `IT-ALERT-MARKER`，主题含严重级别与流程 ID |
+| 本地 SMTP 服务 + 真实 Jakarta Mail 投递 | 收件头 `To: <测试收件邮箱（已脱敏）>`，正文含 `IT-ALERT-MARKER`，主题含严重级别与流程 ID |
 | 流程执行结果 | 手动触发 → 邮件告警节点 SUCCESS，节点输出 `status=sent`、`mode=real` |
 | 模板渲染 | 输出 `subject=告警 FLOW-…`、`message=IT-ALERT-MARKER flow=FLOW-…`，来自上游触发事件 |
 | 凭据安全 | 授权码加密落库，数据源接口只回掩码；执行时由 `DataSourceService.connectionFields()` 解密后使用 |
@@ -347,7 +348,7 @@ bash scripts/deploy-lite.sh
 | 告警单元测试 | `AlertExecutorTest` | 5 项通过：模板渲染、模拟回退、Webhook 投递 + 抑制 + 企微载荷、本地 SMTP 真实发信、SMTP 失败提示 |
 | 告警集成测试 | `IntegrationTest.告警通知节点端到端真实发送邮件` | 通过：API 建邮件数据源 → 建流程 → 执行 → 本地 SMTP 收到真实邮件 |
 
-> 真机邮件需要 SMTP 发件账号（例如 `smtp.126.com:465`、发件邮箱与授权码）。用户确认提供授权码后，将在测试项目创建邮件数据源与「手动触发 → 邮件告警」流程，向 `java_fish@126.com` 发送一封测试邮件并核对收件结果。
+> 真机邮件需要 SMTP 服务器地址、端口、发件邮箱与授权码（均已脱敏）。用户确认提供授权码后，将在测试项目创建邮件数据源与「手动触发 → 邮件告警」流程，向测试收件邮箱发送一封测试邮件并核对收件结果。
 
 ---
 
@@ -423,7 +424,7 @@ bash scripts/deploy-lite.sh
 
 | 排查项 | 结果 |
 |---|---|
-| IDEA 运行配置 | `TongLink-pg` 使用 `DB_URL=jdbc:postgresql://192.168.3.188:5432/tonglink_studio`、`DB_POOL_SIZE=3`，没有设置 `DB_KEEPALIVE_TIME` / `DB_MAX_LIFETIME` 覆盖变量 |
+| IDEA 运行配置 | `TongLink-pg` 使用 PostgreSQL 连接（地址与库名已脱敏）、`DB_POOL_SIZE=3`，没有设置 `DB_KEEPALIVE_TIME` / `DB_MAX_LIFETIME` 覆盖变量 |
 | PG 服务端参数（16.16，直连查询） | `idle_in_transaction_session_timeout=0`、`idle_session_timeout=0`、`statement_timeout=0`、`max_connections=100`、`tcp_keepalives_idle=7200s` —— 服务端不会主动回收空闲连接 |
 | 警告来源 | HikariCP 6.3.3 `PoolBase.isConnectionDead()`；日志线程 `[nio-8080-exec-1]` 说明是 HTTP 请求借连接时校验失败，Hikari 会关闭该连接并重新借一条，**属于自愈行为**，不是连接池整体失效 |
 | 根因判断 | 中间网络（局域网/NAT/防火墙）回收空闲 TCP 会话；此前 5 分钟保活窗口过长，用户请求恰好落在「连接已断、保活尚未探测」的窗口内。OS 级 TCP keepalive 默认 7200 秒，对分钟级回收无效 |
@@ -442,7 +443,7 @@ bash scripts/deploy-lite.sh
 
 ### 18.3 真实 PG 容断验证
 
-针对 `192.168.3.188:5432/tonglink_studio` 运行独立压测（HikariCP 6.3.3 + PG JDBC 42.7.11）：
+针对用户提供的 PostgreSQL 实例（地址与库名已脱敏）运行独立压测（HikariCP 6.3.3 + PG JDBC 42.7.11）：
 
 1. 用新配置创建连接池，取到后端 PID `22788`；
 2. 通过管理员连接执行 `pg_terminate_backend(22788)` 模拟连接被外部掐断；

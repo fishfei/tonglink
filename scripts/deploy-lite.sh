@@ -10,5 +10,5 @@ docker load -i "$tar_file"
 echo "==> 启动容器"
 docker compose -f docker/docker-compose.lite.yml up -d
 
-echo "==> 服务地址 http://localhost:8080 ，内置账号 admin / Admin@123"
+echo "==> 服务地址 http://localhost:8080 ，内置管理员账号见登录页一键填充"
 docker compose -f docker/docker-compose.lite.yml logs -f tonglink

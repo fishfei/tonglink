@@ -17,18 +17,18 @@ class DataSourceServiceTest {
     @Test
     void 掩码密码还原为已保存值() {
         Map<String, Object> incoming = new LinkedHashMap<>();
-        incoming.put("host", "192.168.3.188");
+        incoming.put("host", "db.example.com");
         incoming.put("username", "root");
         incoming.put("password", "******");
         incoming.put("appSecret", "");
-        Map<String, Object> stored = Map.of("password", "root@2025", "appSecret", "real-secret");
+        Map<String, Object> stored = Map.of("password", "test-secret", "appSecret", "real-secret");
 
         Map<String, Object> resolved = DataSourceService.resolveMaskedSecrets(
                 incoming, stored, List.of("password", "appSecret"));
 
-        assertThat(resolved.get("password")).isEqualTo("root@2025");
+        assertThat(resolved.get("password")).isEqualTo("test-secret");
         assertThat(resolved.get("appSecret")).isEqualTo("real-secret");
-        assertThat(resolved.get("host")).isEqualTo("192.168.3.188");
+        assertThat(resolved.get("host")).isEqualTo("db.example.com");
     }
 
     /** 用户新填的明文密码不能被覆盖。 */

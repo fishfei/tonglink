@@ -1782,7 +1782,7 @@
           "key": "webhook",
           "label": "Webhook 地址 / 收件人",
           "type": "text",
-          "placeholder": "邮件填 java_fish@126.com（多个用逗号分隔）；其他渠道填 Webhook URL"
+          "placeholder": "邮件填收件邮箱（多个用逗号分隔）；其他渠道填 Webhook URL"
         },
         {
           "key": "titleTemplate",
