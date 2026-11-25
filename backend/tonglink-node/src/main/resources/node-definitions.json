@@ -91,7 +91,7 @@
         {
           "type": "code",
           "subtype": "nodejs",
-          "title": "Node.js 代码",
+          "title": "node 代码",
           "icon": "code",
           "color": "purple"
         },
@@ -1133,7 +1133,7 @@
       ]
     },
     "code:nodejs": {
-      "title": "Node.js 代码节点",
+      "title": "node 代码节点",
       "note": "生产环境在独立进程/容器中执行，配置模块白名单与资源上限。可用 $input / $json / $vars / $env。",
       "fields": [
         {

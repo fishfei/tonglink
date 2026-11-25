@@ -12,6 +12,7 @@ import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
 import FlowNode from '../components/FlowNode.vue'
 import FlowEdge from '../components/FlowEdge.vue'
+import AppIcon from '../components/AppIcon.vue'
 import ExecutionLogExplorer from '../components/ExecutionLogExplorer.vue'
 import { api, notifyError } from '../api'
 import request from '../api'
@@ -1252,7 +1253,8 @@ onUnmounted(() => {
             <button v-for="d in items" :key="d.type + d.subtype" class="palette-item"
                     draggable="true" :title="`点击添加，或拖到画布：${d.desc || d.title}`"
                     @click="addNode(d)" @dragstart="onPaletteDragStart($event, d)" @dragend="onPaletteDragEnd">
-              {{ d.title }}
+              <AppIcon :name="d.icon || 'code'" :size="15" class="palette-icon" />
+              <span>{{ d.title }}</span>
             </button>
           </div>
         </div>

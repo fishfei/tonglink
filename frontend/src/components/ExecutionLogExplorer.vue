@@ -256,17 +256,23 @@ defineExpose({ refresh: load })
   <div class="log-explorer log-explorer-host">
     <div class="log-filter-bar">
       <span v-if="fixedFlowId" class="log-scope-label">当前流程：{{ flowNameOf(fixedFlowId) }}</span>
-      <el-popover v-model:visible="filterVisible" placement="bottom-start" :width="330" trigger="manual">
-        <template #reference>
-          <button type="button" class="log-filter-btn" @click="filterVisible = !filterVisible">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
-            过滤<span v-if="activeFilterCount()" class="filter-count">{{ activeFilterCount() }}</span>
-          </button>
-        </template>
-        <div class="filter-panel" @click.stop>
+      <div class="filter-anchor">
+        <button type="button" class="log-filter-btn" @click="filterVisible = !filterVisible">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+          过滤<span v-if="activeFilterCount()" class="filter-count">{{ activeFilterCount() }}</span>
+        </button>
+        <!-- 手动面板：不使用 popover 的 clickoutside，选择条件时不会误关闭 -->
+        <div v-if="filterVisible" class="filter-panel" @click.stop>
+          <div class="filter-panel-head">
+            <span>过滤条件</span>
+            <button type="button" class="filter-close" title="关闭" @click="filterVisible = false">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
           <div class="filter-field">
             <label>流程名称</label>
-            <el-select v-if="!fixedFlowId" v-model="flowFilter" placeholder="全部流程" clearable filterable size="small" style="width:100%">
+            <el-select v-if="!fixedFlowId" v-model="flowFilter" placeholder="全部流程" clearable filterable size="small"
+                       style="width:100%">
               <el-option v-for="f in flows" :key="f.id" :label="f.name" :value="f.id" />
             </el-select>
             <div v-else class="filter-fixed">{{ flowNameOf(fixedFlowId) }}</div>
@@ -291,7 +297,7 @@ defineExpose({ refresh: load })
             <el-button size="small" type="primary" @click="applyFilters">应用</el-button>
           </div>
         </div>
-      </el-popover>
+      </div>
       <span class="muted">共 {{ total }} 条{{ fixedFlowId ? ' · 仅当前流程' : ' · 全部流程' }}</span>
     </div>
     <div class="log-explorer-body">

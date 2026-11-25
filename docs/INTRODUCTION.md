@@ -48,7 +48,7 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 |---|---|
 | 触发器 | 手动触发、定时触发、事件订阅（MQTT / Kafka） |
 | 数据源 | MQTT、HTTP、Kafka、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB |
-| 代码与逻辑 | Node.js 代码、Python 代码、条件分支、数据合并、延时等待 |
+| 代码与逻辑 | node 代码、Python 代码、条件分支、数据合并、延时等待 |
 | 输出 | 写入时序库、HTTP 推送、告警通知、飞书多维表格 |
 
 数据库节点支持 `select / insert / update / delete / execute`（MongoDB 为 find/insert/update/delete/aggregate），属性字段随操作类型联动。飞书多维表格节点支持新增、更新、查询、删除记录与字段映射。
