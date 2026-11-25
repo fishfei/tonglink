@@ -42,6 +42,9 @@ const TYPE_ICON: Record<string, string> = {
 }
 const iconName = computed(() =>
   SUBTYPE_ICON[props.data.subtype] || TYPE_ICON[props.data.type] || 'cube')
+// 图标配色由页面按节点类型下发，未下发时回退中性灰
+const accent = computed(() => props.data.accent || '#475569')
+const soft = computed(() => props.data.soft || '#f1f5f9')
 
 /** 条件分支必须有两个独立输出端口，才能分别连接不同的下游节点（提供 true/false 分支）。 */
 const isCondition = computed(() => props.data.type === 'logic' && props.data.subtype === 'condition')
@@ -61,6 +64,7 @@ function mergeTop(index: number, total: number) {
   <div
     class="dflow-node-wrap"
     :class="{ 'is-selected': selected || data.boxSelected, 'is-trigger': data.type === 'trigger', 'is-success': data.runStatus === 'SUCCESS', 'is-failed': data.runStatus === 'FAILED' }"
+    :style="{ '--accent': accent, '--soft': soft }"
     :title="`${data.title}${data.summary ? ' · ' + data.summary : ''}（双击配置）`"
   >
     <div class="dflow-node">
@@ -93,29 +97,30 @@ function mergeTop(index: number, total: number) {
 <style scoped>
 .dflow-node-wrap {
   --accent: #475569;
-  width: 96px;
+  --soft: #f1f5f9;
+  width: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   user-select: none;
 }
 .dflow-node {
   position: relative;
-  width: 96px;
-  height: 96px;
+  width: 48px;
+  height: 48px;
   box-sizing: border-box;
   display: grid;
   place-items: center;
   background: #fff;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
   color: #334155;
   cursor: grab;
   transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, .08);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .08);
 }
-.dflow-node-wrap.is-trigger .dflow-node { border-radius: 38px 16px 16px 38px; }
+.dflow-node-wrap.is-trigger .dflow-node { border-radius: 19px 8px 8px 19px; }
 .dflow-node-wrap:hover .dflow-node { box-shadow: 0 6px 18px rgba(15, 23, 42, .15); transform: translateY(-1px); }
 .dflow-node:active { cursor: grabbing; }
 .dflow-node-wrap.is-selected .dflow-node {
@@ -126,18 +131,19 @@ function mergeTop(index: number, total: number) {
 .dflow-node-wrap.is-success .dflow-node { border-color: #16a34a; }
 .dflow-node-wrap.is-failed .dflow-node { border-color: #dc2626; }
 .dflow-node-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  /* 图标背景与节点底色一致（透明），避免节点内部再出现一块色块 */
-  background: transparent;
-  color: #334155;
+  /* 按节点类型着色的浅色底 + 主题色图标，与原型图一致 */
+  background: var(--soft);
+  color: var(--accent);
 }
+.dflow-node-icon :deep(.dflow-icon-svg) { width: 20px; height: 20px; }
 .dflow-node-name {
-  max-width: 148px;
-  font-size: 12px;
+  max-width: 90px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.25;
   text-align: center;
@@ -148,18 +154,18 @@ function mergeTop(index: number, total: number) {
 }
 .dflow-run-badge {
   position: absolute;
-  right: -6px;
-  bottom: -6px;
-  width: 20px;
-  height: 20px;
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: #fff;
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1;
-  border: 2px solid #fff;
+  border: 1.5px solid #fff;
   z-index: 4;
 }
 .dflow-run-badge.success { background: #16a34a; }
@@ -167,10 +173,10 @@ function mergeTop(index: number, total: number) {
 .dflow-run-badge.running { background: #2563eb; }
 /* 连接点：左进右出，放大命中区域，hover 高亮 */
 .dflow-handle {
-  width: 13px !important;
-  height: 13px !important;
+  width: 9px !important;
+  height: 9px !important;
   background: #fff !important;
-  border: 2px solid var(--accent) !important;
+  border: 1.5px solid var(--accent) !important;
   cursor: crosshair !important;
   transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
   z-index: 3;
@@ -178,7 +184,7 @@ function mergeTop(index: number, total: number) {
 .dflow-handle::after {
   content: '';
   position: absolute;
-  inset: -11px;
+  inset: -8px;
   border-radius: 50%;
 }
 .dflow-handle:hover {
@@ -192,34 +198,34 @@ function mergeTop(index: number, total: number) {
 .dflow-handle.branch-false { border-color: #dc2626 !important; background: #fef2f2 !important; }
 .branch-tag {
   position: absolute;
-  right: -14px;
-  width: 13px;
-  height: 13px;
+  right: -10px;
+  width: 11px;
+  height: 11px;
   border-radius: 3px;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
-  line-height: 13px;
+  line-height: 11px;
   text-align: center;
   z-index: 2;
   pointer-events: none;
 }
-.branch-tag-true { top: calc(38% - 7px); color: #047857; background: #d1fae5; }
-.branch-tag-false { top: calc(74% - 7px); color: #b91c1c; background: #fee2e2; }
+.branch-tag-true { top: calc(38% - 5.5px); color: #047857; background: #d1fae5; }
+.branch-tag-false { top: calc(74% - 5.5px); color: #b91c1c; background: #fee2e2; }
 /* 合并节点：左侧多个输入端口按连线数量均匀分布，旁边标注序号 */
 .dflow-handle.merge-handle { border-color: #7c3aed !important; }
 .merge-port-tag {
   position: absolute;
-  left: -13px;
+  left: -10px;
   transform: translateY(-50%);
-  min-width: 12px;
-  height: 12px;
+  min-width: 10px;
+  height: 10px;
   padding: 0 2px;
   border-radius: 3px;
   background: #ede9fe;
   color: #6d28d9;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  line-height: 12px;
+  line-height: 10px;
   text-align: center;
   pointer-events: none;
   z-index: 2;

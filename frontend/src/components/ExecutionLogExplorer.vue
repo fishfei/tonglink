@@ -46,11 +46,11 @@ const nodeTypes = { dflow: FlowNode }
 const edgeTypes = { deletable: FlowEdge }
 // 与编排页一致：节点统一中性外观，图标按 subtype 自动选择
 const NODE_THEME: Record<string, any> = {
-  trigger: { color: '#475569', soft: '#f1f5f9' },
-  source: { color: '#475569', soft: '#f1f5f9' },
-  code: { color: '#475569', soft: '#f1f5f9' },
-  logic: { color: '#475569', soft: '#f1f5f9' },
-  output: { color: '#475569', soft: '#f1f5f9' }
+  trigger: { color: '#2563eb', soft: '#eff6ff' },
+  source: { color: '#7c3aed', soft: '#f5f3ff' },
+  code: { color: '#059669', soft: '#ecfdf5' },
+  logic: { color: '#d97706', soft: '#fffbeb' },
+  output: { color: '#dc2626', soft: '#fef2f2' }
 }
 
 function statusTag(s: string) {

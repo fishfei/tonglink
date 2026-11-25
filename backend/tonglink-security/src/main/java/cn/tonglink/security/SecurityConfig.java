@@ -48,7 +48,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/v1/auth/login", "/actuator/**", "/ws/**",
                                 "/", "/index.html", "/assets/**", "/favicon.ico",
-                                "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                                "/swagger-ui.html", "/swagger-ui/**", "/swagger-resources/**",
+                                "/webjars/**", "/v3/api-docs/**").permitAll()
                         // 节点定义只读且不含敏感信息，允许在登录前预览节点库
                         .requestMatchers(HttpMethod.GET, "/api/v1/nodes/definitions").permitAll()
                         .anyRequest().authenticated())

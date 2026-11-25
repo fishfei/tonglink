@@ -145,7 +145,7 @@ body {
 .palette-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .palette-item { display: flex; align-items: center; gap: 6px; text-align: left; font-size: 11px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: grab; white-space: nowrap; overflow: hidden; }
 .palette-item:hover { border-color: var(--primary); color: var(--primary); }
-.palette-item:hover .palette-icon { color: var(--primary); }
+.palette-item:hover .palette-icon { color: var(--primary) !important; }
 .palette-item:active { cursor: grabbing; }
 .palette-item[draggable="true"] { user-select: none; }
 .palette-icon { color: #64748b; }

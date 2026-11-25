@@ -127,7 +127,7 @@ const nodeTypes = { dflow: FlowNode }
 const edgeTypes = { deletable: FlowEdge }
 const { screenToFlowCoordinate, viewport } = useVueFlow('editor-flow')
 // 节点外框尺寸（与 FlowNode.vue 保持一致），用于框选命中与多选外框定位
-const NODE_W = 96, NODE_H = 124
+const NODE_W = 48, NODE_H = 66
 const draggingType = ref('') // 当前从节点库拖动的 def key
 
 // 页面顶部 Tab：编排 / 日志（日志不再跳转到独立页面）
@@ -142,13 +142,13 @@ const groups = computed(() => {
   return map
 })
 
-// 画布节点统一中性外观；图标由 FlowNode 按 subtype 选择 SVG，不再按类型配色
+// 画布节点图标按大类着色（与原型图一致）；具体图形由 FlowNode 按 subtype 选择
 const NODE_THEME: Record<string, any> = {
-  trigger: { color: '#475569', soft: '#f1f5f9' },
-  source: { color: '#475569', soft: '#f1f5f9' },
-  code: { color: '#475569', soft: '#f1f5f9' },
-  logic: { color: '#475569', soft: '#f1f5f9' },
-  output: { color: '#475569', soft: '#f1f5f9' }
+  trigger: { color: '#2563eb', soft: '#eff6ff' },
+  source: { color: '#7c3aed', soft: '#f5f3ff' },
+  code: { color: '#059669', soft: '#ecfdf5' },
+  logic: { color: '#d97706', soft: '#fffbeb' },
+  output: { color: '#dc2626', soft: '#fef2f2' }
 }
 
 const PROTOCOL_MAP: Record<string, string> = {
@@ -666,7 +666,7 @@ function onSelectUp() {
   })
   const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x)
   const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y)
-  // 节点外框约 96px 宽、124px 高（方框 96 + 下方名称），与画布坐标一致
+  // 节点外框约 48px 宽、66px 高（方框 48 + 下方名称），与画布坐标一致
   const picked = nodes.value.filter((n: any) => {
     const x = n.position?.x || 0
     const y = n.position?.y || 0
@@ -1253,7 +1253,8 @@ onUnmounted(() => {
             <button v-for="d in items" :key="d.type + d.subtype" class="palette-item"
                     draggable="true" :title="`点击添加，或拖到画布：${d.desc || d.title}`"
                     @click="addNode(d)" @dragstart="onPaletteDragStart($event, d)" @dragend="onPaletteDragEnd">
-              <AppIcon :name="d.icon || 'code'" :size="15" class="palette-icon" />
+              <AppIcon :name="d.icon || 'code'" :size="15" class="palette-icon"
+                       :style="{ color: NODE_THEME[type]?.color || '#64748b' }" />
               <span>{{ d.title }}</span>
             </button>
           </div>
