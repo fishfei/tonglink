@@ -95,7 +95,7 @@ watch(graphSignature, (now, before) => {
   markDirty()
 })
 
-// 多选框选：默认左键在空白处拖动即框选（n8n 风格），平移改用中键/右键。
+// 多选框选：默认左键在空白处拖动即框选（工作流风格），平移改用中键/右键。
 // 不依赖 VueFlow 内置 selectionKeyCode（其 prop 只接受 Boolean/null），自己画选框并写自定义选中标记。
 const selectionRect = ref<{ left: number; top: number; width: number; height: number } | null>(null)
 const viewportRef = ref<HTMLElement>()
@@ -129,7 +129,7 @@ const { screenToFlowCoordinate, viewport } = useVueFlow('editor-flow')
 const NODE_W = 96, NODE_H = 124
 const draggingType = ref('') // 当前从节点库拖动的 def key
 
-// 页面顶部 Tab：编排 / 日志（与 n8n 一致，日志不再跳转到独立页面）
+// 页面顶部 Tab：编排 / 日志（日志不再跳转到独立页面）
 const mainTab = ref<'editor' | 'logs'>('editor')
 
 const definitions = computed(() => store.nodeDefinitions)
@@ -264,7 +264,7 @@ function isMergeNode(n: any) {
 }
 
 /**
- * 合并节点按上游连线数量显示输入端口（参考 n8n）：每条入边独占一个 handle，
+ * 合并节点按上游连线数量显示输入端口：每条入边独占一个 handle，
  * 增删连线后重新从左到右编号，画布上的箭头数量与上游节点数一致。
  */
 function syncMergeInputs() {
@@ -327,7 +327,7 @@ function prettyJson(raw: any) {
   }
 }
 
-/** 新节点不与已有节点重叠；优先排在上游节点右侧，形成从左到右的 n8n 式布局。 */
+/** 新节点不与已有节点重叠；优先排在上游节点右侧，形成从左到右的流水线布局。 */
 function findFreePosition(preferred: { x: number; y: number }) {
   const pos = { ...preferred }
   let guard = 0
@@ -588,7 +588,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
   ElMessage.success(`已删除 ${selectedIds.size} 个节点、${selectedEdgeIds.size} 条连线`)
 }
 
-// ---------------- 多选框选（参考 n8n） ----------------
+// ---------------- 多选框选 ----------------
 function isCanvasBlank(target: EventTarget | null) {
   const el = target as HTMLElement | null
   if (!el || !el.closest) return false
@@ -598,11 +598,11 @@ function isCanvasBlank(target: EventTarget | null) {
     && !el.closest('.vue-flow__handle')
 }
 
-/** n8n 风格：画布空白处左键拖动即框选多选；平移画布请用中键或右键。 */
+/** 工作流交互：画布空白处左键拖动即框选多选；平移画布请用中键或右键。 */
 function onViewportMouseDown(e: MouseEvent) {
   if (e.button !== 0 || !current.value || !viewportRef.value) return
   if (!isCanvasBlank(e.target)) return
-  // 已有多选且按在蓝框内部：直接整体拖动（n8n 行为），不再画新选框
+  // 已有多选且按在蓝框内部：直接整体拖动（同类产品通用行为），不再画新选框
   const box = viewportRef.value.getBoundingClientRect()
   const px = e.clientX - box.left, py = e.clientY - box.top
   const sel = selectionBox.value
@@ -653,7 +653,7 @@ function onSelectUp() {
   selectionRect.value = null
   selectStart = null
   if (rect.width < 5 || rect.height < 5) {
-    // 空白处单击：清空选中，n8n 风格的多选框随之消失
+    // 空白处单击：清空选中，工作流风格的多选框随之消失
     if (!selectAdditive) clearNodeSelection()
     return
   }
@@ -691,7 +691,7 @@ function onSelectUp() {
     : '选框内没有节点')
 }
 
-// ---------------- 多选外框：n8n 风格蓝色虚框 + 整体拖动 ----------------
+// ---------------- 多选外框：工作流风格蓝色虚框 + 整体拖动 ----------------
 const selectedNodeIds = computed(() => nodes.value
   .filter((n: any) => n.selected || n.data?.boxSelected)
   .map((n: any) => n.id))
@@ -851,7 +851,7 @@ async function removeFlow() {
 }
 
 // 多选后整体拖动：VueFlow 内部 getDragItems 不总是识别外部设置的选中态，
-// 这里在拖动事件中按位移量同步其余选中节点，行为与 n8n 一致。
+// 这里在拖动事件中按位移量同步其余选中节点，与主流工作流平台行为一致。
 let dragSync: {
   others: string[]
   base: Record<string, { x: number; y: number }>

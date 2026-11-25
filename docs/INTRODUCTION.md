@@ -95,19 +95,19 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 
 ## 4. 技术栈一览
 
-- 前端：Vue 3 + TypeScript + Vite + Pinia + Element Plus + **`@vue-flow/core`（与 n8n 同款画布）** + CodeMirror 6 + ECharts。
+- 前端：Vue 3 + TypeScript + Vite + Pinia + Element Plus + **`@vue-flow/core`（DAG 画布）** + CodeMirror 6 + ECharts。
 - 后端：Java 21 LTS + Spring Boot 3.5.x + Spring Security + MyBatis-Plus + Quartz。
 - 存储：PostgreSQL 16 + TimescaleDB（标准 / 队列模式），SQLite（轻量单容器模式）。
 - 队列：默认进程内队列；队列模式切 Redis Stream。
-- 代码运行：n8n 式 Task Runner，默认子进程、可选独立容器。
+- 代码运行：Task Runner 双模式，默认子进程、可选独立容器。
 - 协议：Apache PLC4X（OPC UA / Modbus / S7）、Eclipse Paho（MQTT）。
 - AI：Spring AI，支持 OpenAI 兼容接口与本地 Ollama。
 
-## 5. 与 n8n 等项目的关系
+## 5. 设计参考与开源边界
 
-- 交互范式（DAG 画布、节点属性面板、执行日志、类型化连接管理）参考 n8n；画布直接使用与 n8n 相同的 `@vue-flow/core`，代码节点运行方式参考 n8n Task Runner 的双模式设计。
-- 部署形态参考 n8n 的渐进方式：单容器轻量起步，按需增加数据库、队列、Worker、Runner。
-- **不复制 n8n 的代码、品牌或许可条款**。n8n 采用 Sustainable Use License，并非 OSI 开源协议；本项目以 MIT 发布，所有界面文案、模拟数据与实现均为独立编写。
+- 交互范式（DAG 画布、节点属性面板、执行日志、类型化连接管理）采用业界常见的工作流设计；画布使用 MIT 协议的 `@vue-flow/core`，代码节点采用 Task Runner 的双模式设计。
+- 部署形态采用渐进方式：单容器轻量起步，按需增加数据库、队列、Worker、Runner。
+- **本项目以 MIT 协议发布**，不复制任何第三方项目的代码、品牌或许可条款；所有界面文案、模拟数据与实现均为独立编写。
 - 同时参考 Node-RED、EMQX、EdgeX 等开源 IIoT 项目的协议接入思路。
 
 ## 6. 适用与不适用场景

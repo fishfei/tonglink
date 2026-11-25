@@ -32,7 +32,7 @@ const lines = ref<any[]>([])
 const diagramNodes = ref<any[]>([])
 const diagramEdges = ref<any[]>([])
 const loading = ref(false)
-// n8n 风格过滤：漏斗按钮 + 弹出过滤面板
+// 漏斗式过滤：漏斗按钮 + 弹出过滤面板
 const filterVisible = ref(false)
 const timeRange = ref<any[]>([])
 const selectedFlowName = ref('')

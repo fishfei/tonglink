@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * n8n 风格 DAG 节点：统一中性外观，图标按节点子类型选择专业线性 SVG。
+ * 工作流风格 DAG 节点：统一中性外观，图标按节点子类型选择专业线性 SVG。
  * - 触发器节点左侧（流程入口侧）上下两个角弧度更大，画布上一眼可辨；
  * - 左进右出的连接点与流程 JSON 的 in/out handle 对应；
  * - 执行成功后右下角显示绿色勾选，失败显示红色叹号；
@@ -43,10 +43,10 @@ const TYPE_ICON: Record<string, string> = {
 const iconName = computed(() =>
   SUBTYPE_ICON[props.data.subtype] || TYPE_ICON[props.data.type] || 'cube')
 
-/** 条件分支必须有两个独立输出端口，才能分别连接不同的下游节点（参考 n8n 的 true/false 分支）。 */
+/** 条件分支必须有两个独立输出端口，才能分别连接不同的下游节点（提供 true/false 分支）。 */
 const isCondition = computed(() => props.data.type === 'logic' && props.data.subtype === 'condition')
 
-/** 合并节点按上游连线数量渲染独立输入端口（n8n 风格），每条连线占一个箭头位置。 */
+/** 合并节点按上游连线数量渲染独立输入端口（工作流风格），每条连线占一个箭头位置。 */
 const isMerge = computed(() => props.data.type === 'logic' && props.data.subtype === 'merge')
 const mergeInputs = computed<number[]>(() => {
   const count = Math.max(1, Number(props.data.inputCount) || 1)

@@ -118,7 +118,7 @@ tonglink/
 
 ## 文档
 
-- [项目介绍](docs/INTRODUCTION.md) — 功能清单、核心概念、与 n8n 的关系
+- [项目介绍](docs/INTRODUCTION.md) — 功能清单、核心概念、开源边界与许可说明
 - [架构设计](docs/ARCHITECTURE.md) — 前后端架构、执行引擎、节点插件、安全设计
 - [部署指南](docs/DEPLOYMENT.md) — 单容器轻量 / 标准 / 队列模式
 - [开发指南](docs/DEVELOPMENT.md) — IDEA / VS Code 导入、本地运行、测试
@@ -140,4 +140,4 @@ Java 21 · Spring Boot 3.5 · SQLite / PostgreSQL · JdbcTemplate · JWT · AES-
 
 ## 开源协议
 
-本项目采用 [MIT License](LICENSE)。界面范式参考 n8n / Node-RED 等开源项目，但代码与品牌完全独立；画布使用同样 MIT 协议的 `@vue-flow/core`。
+本项目采用 [MIT License](LICENSE)。界面范式参考 Node-RED、EMQX、EdgeX 等开源项目，代码与品牌完全独立；画布使用同样采用 MIT 协议的 `@vue-flow/core`。

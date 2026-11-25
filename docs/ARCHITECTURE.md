@@ -2,7 +2,7 @@
 
 > 本文是把交互原型落地为开源工程的设计基线。原型里已确定的契约（项目 → 流程两级、DAG 画布、Schema 驱动属性面板、类型驱动的数据源表单、节点可安装）在本文中被保留并升级为前后端共享的正式契约。
 >
-> 本版已按用户确认的 9 项决策修订，并对标 n8n 的做法重新设计了代码节点运行与容器部署形态。项目介绍见 [`INTRODUCTION.md`](INTRODUCTION.md)，部署操作见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
+> 本版已按用户确认的 9 项决策修订，并参考业界常见做法重新设计了代码节点运行与容器部署形态。项目介绍见 [`INTRODUCTION.md`](INTRODUCTION.md)，部署操作见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
 
 ---
 
@@ -23,12 +23,12 @@
 - 不做分布式事务；采用「至少一次 + 幂等」语义并在文档中明示。
 - 不承诺对所有恶意代码实现绝对隔离（见第 7 节边界说明）。
 - 不做流处理引擎（Flink 等）；连续订阅场景先用长驻流程 + 缓冲实现。
-- 不复制 n8n 的代码与品牌；n8n 使用 Sustainable Use License，非 OSI 开源协议，本项目只借鉴交互范式与架构思路。
+- 不复制第三方项目的代码与品牌；本项目只借鉴通用交互范式与架构思路，所有依赖保持与本项目兼容的开源许可。
 
 ### 0.3 架构原则
 
 1. **契约先行**：`流程 JSON` 与 `节点定义 Schema` 是前后端、插件之间的唯一契约，原型中的 `Proto.NODE_SCHEMAS` 直接演进为后端下发的 `NodeDefinition.configSchema`。
-2. **渐进式复杂度（对标 n8n）**：默认单容器、进程内执行即可跑通全部功能；需要扩展时再把数据库、队列、Worker、Runner 逐层拆出去。**架构支持拆分，但部署不强制拆分**。
+2. **渐进式复杂度**：默认单容器、进程内执行即可跑通全部功能；需要扩展时再把数据库、队列、Worker、Runner 逐层拆出去。**架构支持拆分，但部署不强制拆分**。
 3. **模块化单体 + 可选独立 Worker**：业务模块在一个 Spring Boot 代码库内分模块；Worker 与 Task Runner 是同一份代码的不同运行 profile。
 4. **插件化一切节点**：内置节点与第三方节点走同一套注册契约，消灭「加节点要改前端」的问题。
 5. **全中文注释**：所有代码注释、Javadoc、JSDoc 使用中文，降低国内贡献者阅读与维护成本。
@@ -71,7 +71,7 @@ flowchart TB
         FILE["本地目录 / MinIO<br/>节点包与大对象"]
     end
 
-    subgraph Runner["代码节点 Task Runner（对标 n8n）"]
+    subgraph Runner["代码节点 Task Runner（双模式）"]
         INT["内部模式：应用拉起的子进程<br/>默认，单容器即可用"]
         EXT["外部模式：独立 runners 容器<br/>生产可选"]
     end
@@ -100,7 +100,7 @@ flowchart TB
     AI --> LLM
 ```
 
-### 1.2 部署视图（对标 n8n 的渐进容器数）
+### 1.2 部署视图（渐进容器数）
 
 容器数量**取决于部署方式，而不是固定的**。同一套镜像通过环境变量切换 profile：
 
@@ -115,7 +115,7 @@ flowchart TB
 
 - 轻量模式使用 SQLite，标准/队列模式使用 PostgreSQL（可叠加 TimescaleDB）。**实际实现**：同一份 jar 内含两套 JDBC 驱动，由 `DB_URL` 前缀自动选择；Repository 层用 JdbcTemplate 手写通用 SQL 屏蔽方言差异，建表由 `schema.sql`（通用 DDL）完成，结构变更按最新脚本重建数据库，不做旧库补列迁移。TimescaleDB hypertable / 连续聚合属于可选增强，非必需；标准模式用原生 PostgreSQL 16 即可运行。
 - 轻量/标准模式不需要 Redis：执行队列是进程内的 `ExecutionQueue` 实现；只有队列模式才启用 Redis Stream 版本。
-- Task Runner 默认是应用拉起的**子进程**（n8n 的 internal mode），因此单容器即可执行 Node.js/Python 代码；只有需要更强隔离时才启用外部 `runners` 容器（n8n 的 external mode）。
+- Task Runner 默认是应用拉起的**子进程**（内部模式），因此单容器即可执行 Node.js/Python 代码；只有需要更强隔离时才启用外部 `runners` 容器（外部模式）。
 - 从轻量模式切换到标准模式按 `schema.sql` 新建 PostgreSQL 库、导入数据并设置 `DB_URL`；不提供旧库结构升级迁移，数据库驱动依据 URL 前缀自动切换。
 
 ### 1.3 技术栈总表
@@ -124,15 +124,15 @@ flowchart TB
 |---|---|---|---|---|
 | 前端框架 | Vue 3 + TypeScript | 3.5+ | MIT | 用户指定；组合式 API 适合复杂画布 |
 | 构建 | Vite + pnpm | Vite 6+/pnpm 9+ | MIT | 快、workspace 友好 |
-| DAG 画布 | **`@vue-flow/core` 及配套包** | **1.48.x** | MIT | **与 n8n 完全同款**（`@vue-flow/core` / `background` / `controls` / `minimap` / `node-resizer`）；上游仓库已归档但版本稳定，锁定版本使用，后续可平滑迁移到 `@xyflow/vue` |
-| 代码编辑 | CodeMirror 6 | 6.x | MIT | n8n 同款，比 Monaco 轻 |
+| DAG 画布 | **`@vue-flow/core` 及配套包** | **1.48.x** | MIT | 成熟的 DAG 画布库（`@vue-flow/core` / `background` / `controls` / `minimap` / `node-resizer`）；上游仓库已归档但版本稳定，锁定版本使用，后续可平滑迁移到 `@xyflow/vue` |
+| 代码编辑 | CodeMirror 6 | 6.x | MIT | 轻量，比 Monaco 更适合嵌入式代码编辑 |
 | UI 组件 | Element Plus | 2.x | MIT | 表单/抽屉/表格齐全，Schema 表单好映射 |
 | 图表 | ECharts | 5.x | Apache-2.0 | 看板趋势/柱状/异常标记 |
 | 状态 | Pinia + Vue Router | 最新 | MIT | 类型友好的状态与路由守卫 |
 | 后端 | **Spring Boot 3.5.x + Java 21 LTS** | 3.5 / 21 | Apache-2.0 | 用户选定 3.x 最新稳定文档版；Java 21 兼容性与生态最稳 |
 | 持久层 | MyBatis-Plus + Flyway | 3.5.x | Apache-2.0 | 动态查询方便，JSON 支持好，迁移可追溯 |
 | 主库 | PostgreSQL 16 + TimescaleDB；轻量模式 SQLite | 16 | PostgreSQL / Apache-2.0 | `JSONB` 存流程定义，TimescaleDB 存执行日志与指标 |
-| 队列 | 进程内队列（默认）/ Redis Streams（队列模式） | 7+/Valkey | BSD / 视版本 | 默认零依赖，扩展时按 n8n 队列模式思路切换 |
+| 队列 | 进程内队列（默认）/ Redis Streams（队列模式） | 7+/Valkey | BSD / 视版本 | 默认零依赖，扩展时按常见队列模式切换 |
 | 调度 | Quartz（支持 JDBC Store） | 2.5.x | Apache-2.0 | Cron + SimpleTrigger 直接覆盖「每 N 秒/分」 |
 | 安全 | Spring Security + JWT + AES-GCM | - | Apache-2.0 | 无状态 API，数据源密码字段 AES-GCM 加密 |
 | AI | Spring AI（OpenAI 兼容 / Ollama） | 1.x | Apache-2.0 | Function Calling 原生，便于工具化 |
@@ -168,7 +168,7 @@ frontend/
 │  ├─ components/
 │  │  ├─ common/                      # 按钮/抽屉/表格/状态徽标
 │  │  ├─ flow/
-│  │  │  ├─ FlowCanvas.vue            # @vue-flow/core 封装（与 n8n 同款）
+│  │  │  ├─ FlowCanvas.vue            # @vue-flow/core 封装
 │  │  │  ├─ FlowNode.vue              # 自定义节点（含状态灯）
 │  │  │  ├─ NodePalette.vue           # 节点库 + 节点管理入口
 │  │  │  ├─ NodeConfigDrawer.vue      # 双击节点打开
@@ -200,7 +200,7 @@ frontend/
 
 **b. DAG 画布**
 
-- 基于 **`@vue-flow/core` 1.48.x**（n8n 当前使用版本）及 `background` / `controls` / `minimap` / `node-resizer` 配套包；自定义节点组件、自定义贝塞尔边。
+- 基于 **`@vue-flow/core` 1.48.x** 及 `background` / `controls` / `minimap` / `node-resizer` 配套包；自定义节点组件、自定义贝塞尔边。
 - 交互与原型保持一致：**单击选中并可拖动，双击打开属性配置**，Delete 删除，拖拽端口连线，滚轮缩放。
 - 保存时把 `nodes[]`（id/type/subtype/position/config）与 `edges[]`（id/source/target/sourceHandle/targetHandle）序列化为流程 JSON。
 - 连线前做环检测（拓扑排序），有环则拒绝并提示；流程发布时后端再校验一次。
@@ -452,18 +452,18 @@ sequenceDiagram
 
 ---
 
-## 7. 代码节点的运行方式（对标 n8n Task Runner）
+## 7. 代码节点的运行方式（Task Runner 双模式）
 
-### 7.1 先纠正一个认知
+### 7.1 设计依据
 
-n8n **确实**把 Code 节点的用户代码放到独立进程执行，并不是简单地在主进程里跑：
+将用户代码放在独立进程执行，可以避免代码节点直接影响主进程稳定性：
 
-- 2024 年（1.71）引入 Task Runner，2025 年 2.x 起成为默认执行方式；此前用的 `vm2` 因多次沙箱逃逸已于 2023 年停止维护。
-- **内部模式（internal）**：n8n 主进程把 runner 作为**子进程**拉起，同一台机器、同一组用户，默认即可用，单容器能跑。
-- **外部模式（external）**：runner 运行在独立容器（n8n 官方 `n8nio/runners` 镜像），通过 WebSocket 连接主进程内嵌的 TaskBroker，用共享 token 鉴权；生产推荐，但属于可选增强。
+- 执行器与 runner 通过本地任务协议通信，代码在独立进程中运行。
+- **内部模式（internal）**：应用把 runner 作为**子进程**拉起，同一台机器、同一组用户，默认即可用，单容器能跑。
+- **外部模式（external）**：runner 运行在独立容器（可自行构建），通过 WebSocket 连接主进程内嵌的 TaskBroker，用共享 token 鉴权；适合对隔离要求更高的生产环境，属于可选增强。
 - JS 在 runner 内用 `vm` context + 原型冻结 + 模块白名单；Python 用原生解释器 + AST 静态检查 + 导入白名单。
 
-所以原稿中「必须单独跑容器 + seccomp/gVisor」的设计确实过重了。本版改为 n8n 式的**双模式**：默认子进程，可选容器。
+原稿中「必须单独跑容器 + seccomp/gVisor」的设计过重。本版采用**双模式**：默认子进程，可选容器。
 
 ### 7.2 本项目的简化设计
 
@@ -491,7 +491,7 @@ n8n **确实**把 Code 节点的用户代码放到独立进程执行，并不是
 | 输出 | 1MB | 超限截断并标记 |
 | 网络 | 白名单 | 默认拒绝，白名单 host:port 由流程配置声明 |
 
-边界说明：内部模式是**故障隔离 + 资源限制**，不是强安全边界（与 n8n 官方口径一致）；生产环境若运行不可信代码，应启用外部模式并配合只读根文件系统、非 root 用户、AppArmor 等容器加固。**首版两种模式都实现**，部署文档给出对应配置。
+边界说明：内部模式是**故障隔离 + 资源限制**，不是强安全边界；生产环境若运行不可信代码，应启用外部模式并配合只读根文件系统、非 root 用户、AppArmor 等容器加固。**首版两种模式都实现**，部署文档给出对应配置。
 
 ---
 
@@ -684,8 +684,8 @@ tonglink-studio/
 | 4. 仓库 | **Monorepo，不分仓** | 前后端、插件示例、文档同仓 |
 | 5. 注释 | **全中文** | Javadoc / JSDoc / 模块 README / SQL 注释均中文 |
 | 6. 文档 | **补充项目介绍与部署文档** | `INTRODUCTION.md` 与 `DEPLOYMENT.md` |
-| 7. DAG 库 | **`@vue-flow/core` 1.48.x（与 n8n 同款）** | 锁定版本；上游归档但功能稳定，保留迁移到 `@xyflow/vue` 的路线 |
+| 7. DAG 库 | **`@vue-flow/core` 1.48.x** | 锁定版本；上游归档但功能稳定，保留迁移到 `@xyflow/vue` 的路线 |
 | 8. 首版范围 | **全部功能完整交付** | 见第 14 节，不做功能裁剪 |
-| 9. 代码节点与部署 | **对标 n8n**：默认子进程 Runner（单容器可跑），可选独立 runners 容器；容器数按部署形态 1 / 2 / 4+ 渐进 | 见第 7 节与 `DEPLOYMENT.md` |
+| 9. 代码节点与部署 | **双模式 Runner**：默认子进程（单容器可跑），可选独立 runners 容器；容器数按部署形态 1 / 2 / 4+ 渐进 | 见第 7 节与 `DEPLOYMENT.md` |
 
 确认后按第 14 节顺序开始生成工程代码。
