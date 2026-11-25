@@ -28,8 +28,8 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 
 ### 2.2 数据源管理
 
-- IT 数据源：HTTP/REST、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB、Kafka、MQTT。
-- OT 数据源：OPC UA、Modbus TCP、S7comm。
+- IT 数据源：HTTP/REST、OAuth 2.0、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB、Kafka、MQTT。
+- OT 数据源：OPC UA、Modbus TCP、S7comm 暂未开放，后续版本再启用。
 - 新建 / 编辑表单字段随连接类型变化；数据库连接可填「主机 + 端口」（库名可选，MySQL/PostgreSQL 允许连接实例后再指定库）或直接粘贴完整 JDBC URL，抽屉里可保存前测试连接。Oracle/SQL Server 仍需填写服务名或库名。
 - 支持单条按名称导出与全部导出，支持 JSON 导入。
 
@@ -46,8 +46,8 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 
 | 类别 | 节点 |
 |---|---|
-| 触发器 | 手动触发、定时触发、事件订阅（MQTT / OPC UA） |
-| 数据源 | OPC UA、Modbus、S7comm、MQTT、HTTP、Kafka、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB |
+| 触发器 | 手动触发、定时触发、事件订阅（MQTT / Kafka） |
+| 数据源 | MQTT、HTTP、Kafka、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB |
 | 代码与逻辑 | Node.js 代码、Python 代码、条件分支、数据合并、延时等待 |
 | 输出 | 写入时序库、HTTP 推送、告警通知、飞书多维表格 |
 

@@ -68,6 +68,15 @@ public class ExternalTriggerService {
     /** 周期性对齐「已发布流程中的触发节点」与「运行中的订阅」。 */
     @Scheduled(fixedDelayString = "${tonglink.scheduler.interval-ms:5000}")
     public void reconcile() {
+        try {
+            reconcileInternal();
+        } catch (Exception e) {
+            // 数据库短暂不可用时不销毁已建立的订阅，下一轮再对齐即可
+            log.warn("本轮触发器对齐跳过：数据库暂不可用（{}）", e.getMessage());
+        }
+    }
+
+    private void reconcileInternal() {
         Set<String> desired = new HashSet<>();
         for (Flow flow : flows.flows()) {
             if (!"active".equals(flow.status()) || flow.publishedGraphJson() == null

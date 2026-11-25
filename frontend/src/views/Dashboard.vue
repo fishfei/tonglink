@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch, nextTick } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { api } from '../api'
@@ -14,6 +14,14 @@ const trendChart = ref<HTMLElement>()
 const barChart = ref<HTMLElement>()
 let trendInstance: echarts.ECharts | null = null
 let barInstance: echarts.ECharts | null = null
+
+/** 横向条形图：名称越长左侧留白越宽，但设上限避免挤压绘图区；条数多时自动增高。 */
+const barGridLeft = computed(() => {
+  const names = stats.value.map((s: any) => String(s.name || ''))
+  const maxLen = names.length ? Math.max(...names.map((n: string) => n.length)) : 0
+  return Math.min(190, Math.max(110, maxLen * 12 + 24))
+})
+const barHeight = computed(() => Math.max(240, Math.min(480, stats.value.length * 36 + 60)))
 
 /** 流程运行状态中文化：运行中的发布版 / 已下线 / 草稿。 */
 function flowStatusText(row: any) {
@@ -44,12 +52,25 @@ async function load() {
     barInstance = echarts.init(barChart.value)
   }
   barInstance?.setOption({
-    tooltip: { trigger: 'axis' },
-    grid: { left: 120, right: 30, top: 20, bottom: 30 },
-    xAxis: { type: 'value' },
-    yAxis: { type: 'category', data: stats.value.map(s => s.name) },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      // 坐标轴标签被截断时，悬停仍显示完整流程名称
+      formatter: (params: any) => {
+        const p = Array.isArray(params) ? params[0] : params
+        return p ? `${p.name}<br/>采集记录数：<b>${p.value}</b>` : ''
+      }
+    },
+    grid: { left: barGridLeft.value, right: 30, top: 20, bottom: 30 },
+    xAxis: { type: 'value', minInterval: 1 },
+    yAxis: {
+      type: 'category',
+      data: stats.value.map(s => s.name),
+      axisLabel: { color: '#475569', width: 130, overflow: 'truncate', ellipsis: '…' }
+    },
     series: [{ type: 'bar', data: stats.value.map(s => s.records), itemStyle: { color: '#8b5cf6', borderRadius: [0, 4, 4, 0] } }]
   })
+  barInstance?.resize()
 }
 
 watch(range, load)
@@ -87,7 +108,7 @@ onMounted(() => {
       </div>
       <div class="card">
         <div class="card-title">各流程采集记录数</div>
-        <div ref="barChart" style="height:240px" />
+        <div ref="barChart" :style="{ height: barHeight + 'px' }" />
       </div>
     </div>
 

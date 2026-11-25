@@ -23,11 +23,14 @@ import cn.tonglink.repository.MetaRepository;
 import cn.tonglink.repository.UserRepository;
 import cn.tonglink.security.CredentialTypeRegistry;
 import cn.tonglink.security.CryptoService;
+import com.zaxxer.hikari.HikariDataSource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -48,6 +51,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class DataInitializer implements CommandLineRunner {
 
+    private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
+
     private final UserRepository users;
     private final MetaRepository meta;
     private final FlowRepository flows;
@@ -55,6 +60,7 @@ public class DataInitializer implements CommandLineRunner {
     private final PasswordEncoder encoder;
     private final CryptoService crypto;
     private final CredentialTypeRegistry credentialTypes;
+    private final javax.sql.DataSource dataSource;
 
     /** 是否重建演示账号；默认关闭，避免生产环境覆盖用户修改后的口令。 */
     @Value("${tonglink.auth.reset-demo-users:false}")
@@ -70,7 +76,7 @@ public class DataInitializer implements CommandLineRunner {
 
     public DataInitializer(UserRepository users, MetaRepository meta, FlowRepository flows,
                            ExecutionRepository executions, PasswordEncoder encoder, CryptoService crypto,
-                           CredentialTypeRegistry credentialTypes) {
+                           CredentialTypeRegistry credentialTypes, javax.sql.DataSource dataSource) {
         this.users = users;
         this.meta = meta;
         this.flows = flows;
@@ -78,10 +84,17 @@ public class DataInitializer implements CommandLineRunner {
         this.encoder = encoder;
         this.crypto = crypto;
         this.credentialTypes = credentialTypes;
+        this.dataSource = dataSource;
     }
 
     @Override
     public void run(String... args) {
+        // 启动时打印实际生效的连接池参数，便于在 IDEA 控制台确认保活配置没有被环境变量覆盖
+        if (dataSource instanceof HikariDataSource hikari) {
+            log.info("元数据库连接池：keepalive={}ms, maxLifetime={}ms, minimumIdle={}, maxPool={}, validationTimeout={}ms",
+                    hikari.getKeepaliveTime(), hikari.getMaxLifetime(), hikari.getMinimumIdle(),
+                    hikari.getMaximumPoolSize(), hikari.getValidationTimeout());
+        }
         // 系统只保留 admin 一个账户：历史库里的演示角色每次启动都清理，避免残留可登录入口
         users.deleteByUsername("engineer");
         users.deleteByUsername("viewer");

@@ -3,7 +3,7 @@
  * 执行日志浏览器（流程编排页与「执行日志」菜单共用同一套界面）。
  * - 传入 fixedFlowId 时锁定到指定流程，用于编排页（只看当前流程）；
  * - 不传时展示流程下拉，可查询所有流程，用于独立日志菜单；
- * - 左侧服务端分页记录列表 + 右侧只读流程图/节点输入输出/运行日志/标签/AI 诊断。
+ * - 左侧服务端分页记录列表 + 右侧只读流程图/节点输入输出/运行日志/AI 诊断。
  */
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -22,7 +22,6 @@ const store = useAppStore()
 const flows = ref<any[]>([])
 const flowFilter = ref(props.fixedFlowId || '')
 const status = ref('')
-const tag = ref('')
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
@@ -32,7 +31,6 @@ const nodes = ref<any[]>([])
 const lines = ref<any[]>([])
 const diagramNodes = ref<any[]>([])
 const diagramEdges = ref<any[]>([])
-const tagDraft = ref<string[]>([])
 const loading = ref(false)
 // n8n 风格过滤：漏斗按钮 + 弹出过滤面板
 const filterVisible = ref(false)
@@ -57,22 +55,6 @@ const NODE_THEME: Record<string, any> = {
 
 function statusTag(s: string) {
   return s === 'SUCCESS' ? 'success' : (s === 'FAILED' ? 'danger' : (s === 'RUNNING' ? 'warning' : 'info'))
-}
-
-// n8n 风格彩色标签：同名标签颜色稳定，列表与详情保持一致
-const TAG_PALETTE = [
-  { bg: '#f5f3ff', fg: '#6d28d9', bd: '#ddd6fe' },
-  { bg: '#eff6ff', fg: '#1d4ed8', bd: '#bfdbfe' },
-  { bg: '#ecfdf5', fg: '#047857', bd: '#a7f3d0' },
-  { bg: '#fff7ed', fg: '#c2410c', bd: '#fed7aa' },
-  { bg: '#fdf2f8', fg: '#be185d', bd: '#fbcfe8' },
-  { bg: '#f8fafc', fg: '#475569', bd: '#cbd5e1' }
-]
-function tagStyle(name: string) {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
-  const c = TAG_PALETTE[Math.abs(hash) % TAG_PALETTE.length]
-  return { background: c.bg, color: c.fg, borderColor: c.bd }
 }
 
 function prettyJson(raw: any) {
@@ -135,12 +117,6 @@ function decoratedEdges(rows: any[], statuses: Map<string, string>) {
   })
 }
 
-function allTags() {
-  const set = new Set<string>()
-  list.value.forEach(row => (row.tags || []).forEach((t: string) => set.add(t)))
-  return [...set].sort()
-}
-
 function formatDateTime(value: any) {
   if (!value) return ''
   if (typeof value === 'string') return value
@@ -159,22 +135,21 @@ function activeFilterCount() {
   let n = 0
   if (!props.fixedFlowId && flowFilter.value) n++
   if (status.value) n++
-  if (tag.value) n++
   if (timeRange.value?.length === 2 && timeRange.value[0] && timeRange.value[1]) n++
   return n
 }
 
-function applyFilters() {
+async function applyFilters() {
+  // 手动弹窗：点「应用」立即回到第一页并刷新，不需要再点刷新按钮
   filterVisible.value = false
-  reloadFromFirst()
+  await reloadFromFirst()
 }
 
 function resetFilters() {
   flowFilter.value = props.fixedFlowId || ''
   status.value = ''
-  tag.value = ''
   timeRange.value = []
-  applyFilters()
+  void applyFilters()
 }
 
 async function load() {
@@ -182,7 +157,7 @@ async function load() {
   try {
     flows.value = await api.flows()
     const params: any = {
-      page: page.value, size: pageSize.value, status: status.value, tag: tag.value
+      page: page.value, size: pageSize.value, status: status.value
     }
     const fixed = props.fixedFlowId || flowFilter.value
     if (fixed) params.flowId = fixed
@@ -212,19 +187,17 @@ function clearSelection() {
   lines.value = []
   diagramNodes.value = []
   diagramEdges.value = []
-  tagDraft.value = []
   selectedFlowName.value = ''
   diagnosis.value = null
 }
 
 function reloadFromFirst() {
   page.value = 1
-  load()
+  return load()
 }
 
 async function select(row: any) {
   selected.value = row
-  tagDraft.value = [...(row.tags || [])]
   diagnosis.value = null
   const [nodeRows, logRows]: any[] = await Promise.all([
     api.executionNodes(row.id), api.executionLogs(row.id)
@@ -250,19 +223,6 @@ async function select(row: any) {
     diagramNodes.value = []
     diagramEdges.value = []
   }
-}
-
-async function saveTags() {
-  if (!selected.value) return
-  const id = selected.value.id
-  const tags: string[] = await api.setExecutionTags(id, tagDraft.value)
-  // 立即回写左侧列表行与右侧选中对象：整页重载会在过滤态或翻页后把目标行换掉，
-  // 导致刚保存的标签看起来「没显示」。
-  const row = list.value.find(e => e.id === id)
-  if (row) row.tags = tags
-  selected.value = { ...selected.value, tags }
-  tagDraft.value = [...tags]
-  ElMessage.success('标签已保存')
 }
 
 async function diagnose() {
@@ -296,14 +256,14 @@ defineExpose({ refresh: load })
   <div class="log-explorer log-explorer-host">
     <div class="log-filter-bar">
       <span v-if="fixedFlowId" class="log-scope-label">当前流程：{{ flowNameOf(fixedFlowId) }}</span>
-      <el-popover v-model:visible="filterVisible" placement="bottom-start" :width="330" trigger="click">
+      <el-popover v-model:visible="filterVisible" placement="bottom-start" :width="330" trigger="manual">
         <template #reference>
-          <button type="button" class="log-filter-btn">
+          <button type="button" class="log-filter-btn" @click="filterVisible = !filterVisible">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
             过滤<span v-if="activeFilterCount()" class="filter-count">{{ activeFilterCount() }}</span>
           </button>
         </template>
-        <div class="filter-panel">
+        <div class="filter-panel" @click.stop>
           <div class="filter-field">
             <label>流程名称</label>
             <el-select v-if="!fixedFlowId" v-model="flowFilter" placeholder="全部流程" clearable filterable size="small" style="width:100%">
@@ -320,10 +280,6 @@ defineExpose({ refresh: load })
             </el-select>
           </div>
           <div class="filter-field">
-            <label>标签</label>
-            <el-input v-model="tag" placeholder="输入标签文字" clearable size="small" @keyup.enter="applyFilters" />
-          </div>
-          <div class="filter-field">
             <label>执行时间</label>
             <el-date-picker v-model="timeRange" type="datetimerange" range-separator="至"
                             start-placeholder="开始时间" end-placeholder="结束时间"
@@ -336,7 +292,6 @@ defineExpose({ refresh: load })
           </div>
         </div>
       </el-popover>
-      <el-button size="small" @click="reloadFromFirst">刷新</el-button>
       <span class="muted">共 {{ total }} 条{{ fixedFlowId ? ' · 仅当前流程' : ' · 全部流程' }}</span>
     </div>
     <div class="log-explorer-body">
@@ -347,9 +302,6 @@ defineExpose({ refresh: load })
                :class="{ active: selected?.id === row.id }" @click="select(row)">
             <div class="log-row-top">
               <el-tag :type="statusTag(row.status)" size="small">{{ row.status }}</el-tag>
-              <el-tooltip v-if="row.tags?.length" :content="row.tags.join('、')" placement="top" :show-after="300">
-                <span class="log-row-tags-inline">{{ row.tags.join('、') }}</span>
-              </el-tooltip>
             </div>
             <div class="muted log-row-meta">{{ row.startTime }} · {{ row.records }} 条 · {{ row.triggerType }}</div>
           </div>
@@ -367,9 +319,6 @@ defineExpose({ refresh: load })
           <div class="log-detail-head">
             <div>
               <div class="pane-title" style="margin:0">{{ selectedFlowName || selected.flowId }}</div>
-              <div v-if="selected.tags?.length" class="log-row-tags">
-                <span v-for="t in selected.tags" :key="t" class="log-row-tag" :style="tagStyle(t)">#{{ t }}</span>
-              </div>
             </div>
             <el-button size="small" type="primary" plain :loading="diagLoading" @click="diagnose">AI 诊断</el-button>
           </div>
@@ -381,14 +330,6 @@ defineExpose({ refresh: load })
               <Background :gap="16" pattern-color="#e2e8f0" />
             </VueFlow>
             <div v-else class="muted" style="padding:20px">该执行没有可展示的流程图</div>
-          </div>
-          <div class="pane-title log-tag-row">
-            <span>标签</span>
-            <el-select v-model="tagDraft" multiple filterable allow-create default-first-option
-                       :reserve-keyword="false" placeholder="输入后回车新增" size="small" style="flex:1">
-              <el-option v-for="t in allTags()" :key="t" :label="t" :value="t" />
-            </el-select>
-            <el-button size="small" type="primary" @click="saveTags">保存标签</el-button>
           </div>
           <div class="pane-title">节点输入输出</div>
           <div class="log-node-list">

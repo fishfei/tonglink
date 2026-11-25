@@ -15,10 +15,10 @@ import org.springframework.stereotype.Component;
 /**
  * 工业协议与输出类节点的模拟执行器。
  *
- * <p>OPC UA / Modbus / 飞书等节点需要现场设备或第三方凭据才能真实运行；告警节点已由
- * {@link AlertExecutor} 实现真实投递。
+ * <p>飞书等第三方节点需要凭据才能真实运行；告警节点已由 {@link AlertExecutor} 实现真实投递。
  * 轻量模式下由本执行器生成结构真实、取值合理的模拟数据，使「编排 → 运行 → 看板」
- * 整条链路可以在没有现场环境的机器上演示。真实协议接入见架构文档第 9 节。</p>
+ * 整条链路可以在没有现场环境的机器上演示。OPC UA / Modbus 节点已暂时从节点面板与数据源
+ * 类型目录移除，这里保留执行能力仅为兼容历史流程继续运行。</p>
  */
 @Component
 public class SimulatedSourceExecutor implements NodeExecutor {

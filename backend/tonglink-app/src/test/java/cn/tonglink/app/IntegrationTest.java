@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import cn.tonglink.execution.ExecutionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zaxxer.hikari.HikariDataSource;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -59,6 +61,9 @@ class IntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private DataSource dataSource;
+
     private final ObjectMapper json = new ObjectMapper();
 
     /** 每个测试类使用唯一数据库文件，避免上次运行残留数据。 */
@@ -67,6 +72,18 @@ class IntegrationTest {
         Path db = Path.of("target", "it-" + System.nanoTime() + ".db").toAbsolutePath();
         registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + db);
         registry.add("tonglink.scheduler.interval-ms", () -> "3600000");
+    }
+
+    /** 连接池保活参数必须从 application.yml 正确绑定到 Hikari，否则 PG 空闲连接会被网络回收。 */
+    @Test
+    void 连接池保活参数已生效() {
+        assertThat(dataSource).isInstanceOf(HikariDataSource.class);
+        HikariDataSource hikari = (HikariDataSource) dataSource;
+        assertThat(hikari.getKeepaliveTime()).as("keepaliveTime").isBetween(30_000L, 60_000L);
+        assertThat(hikari.getMaxLifetime()).as("maxLifetime").isBetween(120_000L, 600_000L);
+        assertThat(hikari.getMaxLifetime()).as("maxLifetime").isGreaterThan(hikari.getKeepaliveTime());
+        assertThat(hikari.getMinimumIdle()).as("minimumIdle").isGreaterThanOrEqualTo(1);
+        assertThat(hikari.getValidationTimeout()).as("validationTimeout").isGreaterThan(0);
     }
 
     /** 正确口令可换到令牌；不带令牌访问受保护接口返回 401。 */
@@ -179,7 +196,8 @@ class IntegrationTest {
                 .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(11)))
                 .andReturn();
         String body = read(types).path("data").toString();
-        assertTrue(body.contains("opcua") && body.contains("modbus") && body.contains("http"));
+        assertTrue(body.contains("oauth2") && body.contains("http"));
+        assertTrue(!body.contains("opcua") && !body.contains("modbus"));
         assertTrue(body.contains("kingdee") && body.contains("feishu") && body.contains("database"));
 
         MvcResult feishu = mvc.perform(post("/api/v1/datasources")

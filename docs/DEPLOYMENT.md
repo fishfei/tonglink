@@ -115,7 +115,7 @@ docker compose -f docker/docker-compose.postgres.yml up -d
 - 不设 `DB_URL`：默认 `jdbc:sqlite:./data/tonglink.db`（轻量模式）
 - 设 `DB_URL=jdbc:postgresql://host:5432/db`：Spring Boot 依据 URL 前缀自动选择 PG 驱动，无需重新打包
 
-配套变量：`DB_USER`、`DB_PASSWORD`、`DB_POOL_SIZE`（连接池大小，默认 5，PG 模式建议 20）。表结构由 `schema.sql` 在首次启动时自动创建（15 张表，SQLite/PG 通用）。项目不做旧库结构升级：结构变更请按最新脚本重建数据库并导入数据。
+配套变量：`DB_USER`、`DB_PASSWORD`、`DB_POOL_SIZE`（连接池大小，默认 5，PG 模式建议 20）。实测 PG 服务端（`idle_in_transaction_session_timeout=0`、`idle_session_timeout=0`）不会主动断开空闲连接，断链来自中间网络回收空闲 TCP 会话；因此连接池默认 `maxLifetime=5 分钟`、`keepaliveTime=30 秒`、`idleTimeout=2 分钟`、`validationTimeout=5 秒`，把「借到已断开连接」的窗口压到最小，分别可用 `DB_MAX_LIFETIME`、`DB_KEEPALIVE_TIME`、`DB_IDLE_TIMEOUT`、`DB_VALIDATION_TIMEOUT` 覆盖。`DB_INIT_FAIL_TIMEOUT=-1`（默认）表示数据库短暂不可用时应用仍启动、由 Hikari 后台持续重连。PG 的 `DB_URL` 建议追加 `?tcpKeepAlive=true&connectTimeout=5&socketTimeout=30`。启动时控制台会打印实际生效的池参数，便于确认 IDEA 运行配置没有用旧环境变量覆盖默认值。应用启动时还会把 Hikari 补池周期从默认 30 秒改为 5 秒（可用 JVM 参数 `-Dcom.zaxxer.hikari.housekeeping.periodMs` 覆盖），避免数据库抖动导致池空后正好卡满 30 秒借连接超时；定时调度与触发器对齐在数据库短暂不可用时只跳过本轮，不会刷出整屏 ERROR 堆栈。表结构由 `schema.sql` 在首次启动时自动创建（15 张表，SQLite/PG 通用）。项目不做旧库结构升级：结构变更请按最新脚本重建数据库并导入数据。
 
 > 注意：旧版文档中出现的 `DB_TYPE`、`QUEUE_TYPE`、`STORAGE_DIR` 变量已被废弃，代码从未读取，请勿再使用。
 
@@ -266,6 +266,12 @@ RUNNER_BROKER_PORT=5679
 | `DB_USER` | `sa` | 数据库用户名；PG 模式设为对应用户（如 `tonglink`） |
 | `DB_PASSWORD` | 空 | 数据库密码 |
 | `DB_POOL_SIZE` | `5` | Hikari 连接池大小；PG 模式建议 `20` |
+| `DB_MIN_IDLE` | `2` | 最小空闲连接数，避免空闲一段时间后冷连接集中重建 |
+| `DB_MAX_LIFETIME` | `300000` | 连接最大存活毫秒数（5 分钟），应小于服务端/NAT 回收时间 |
+| `DB_KEEPALIVE_TIME` | `30000` | Hikari 保活探测间隔（30 秒），必须小于 `DB_MAX_LIFETIME` |
+| `DB_IDLE_TIMEOUT` | `120000` | 空闲连接回收时间（2 分钟），仅在空闲连接多于 `DB_MIN_IDLE` 时生效 |
+| `DB_VALIDATION_TIMEOUT` | `5000` | 连接校验超时毫秒数 |
+| `DB_INIT_FAIL_TIMEOUT` | `-1` | 数据库短暂不可达时仍启动，由 Hikari 后台持续重连 |
 | `TONGLINK_DB_PATH` | `./data/tonglink.db` | 仅 SQLite 模式生效；容器内设为 `/app/data/tonglink.db` |
 | `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 数据源中认证凭据密码字段的 AES-GCM 主密钥（变量为明文，不依赖此密钥），**生产必须修改** |
 | `TONGLINK_JWT_SECRET` | 开发用默认值 | JWT 签名密钥，**生产必须修改且足够长** |

@@ -213,12 +213,12 @@ onMounted(load)
     <div class="card">
       <el-input v-model="keyword" placeholder="搜索名称、类型或协议" style="width:280px" clearable />
       <el-table :data="paged" size="small" style="margin-top:12px">
-        <el-table-column prop="id" label="ID" width="110" />
-        <el-table-column prop="name" label="名称" min-width="180" />
-        <el-table-column label="连接类型" min-width="170">
+        <el-table-column prop="id" label="ID" width="240" show-overflow-tooltip />
+        <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+        <el-table-column label="连接类型" width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ typeLabel(row) }}</template>
         </el-table-column>
-        <el-table-column prop="protocol" label="协议" width="120" />
+        <el-table-column prop="protocol" label="协议" width="110" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <span :class="['status-dot', row.status === 'connected' ? 'status-success' : 'status-failed']" />

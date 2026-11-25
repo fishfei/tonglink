@@ -24,15 +24,17 @@ public class CredentialTypeRegistry {
     private final Map<String, Map<String, Object>> types = new LinkedHashMap<>();
 
     public CredentialTypeRegistry() {
-        add("opcua", "OPC UA 连接", "OT", "OPC UA",
-                field("endpoint", "服务端地址", "text", true, "opc.tcp://127.0.0.1:4840"),
-                field("namespace", "命名空间", "text", false, "3"),
-                field("username", "用户名", "text", false, "可选"),
-                field("password", "密码", "password", false, "可选"));
-        add("modbus", "Modbus TCP 连接", "OT", "Modbus TCP",
-                field("host", "主机", "text", true, "127.0.0.1"),
-                field("port", "端口", "text", false, "502"),
-                field("unitId", "从站号", "text", false, "1"));
+        // OPC UA / Modbus 暂不从数据源管理暴露；节点定义也同步隐藏，后续需要再恢复。
+        add("oauth2", "OAuth 2.0", "IT", "HTTP/REST",
+                select("grantType", "授权模式", true,
+                        "client_credentials", "password", "authorization_code"),
+                field("tokenUrl", "令牌地址", "text", true, "https://api.example.com/oauth/token"),
+                field("clientId", "Client ID", "text", true, "客户端 ID"),
+                field("clientSecret", "Client Secret", "password", true, "客户端密钥"),
+                field("scope", "Scope", "text", false, "可选，多个 scope 用空格分隔"),
+                field("username", "用户名", "text", false, "password 模式必填"),
+                field("password", "密码", "password", false, "password 模式必填"),
+                field("accessToken", "访问令牌（可选）", "password", false, "已有令牌时可直接填写"));
         add("mqtt", "MQTT 连接", "OT", "MQTT",
                 field("uri", "Broker 地址", "text", true, "tcp://127.0.0.1:1883"),
                 field("username", "用户名", "text", false, "可选"),

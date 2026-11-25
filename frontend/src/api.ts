@@ -104,7 +104,6 @@ export const api = {
   execution: (id: string) => request.get(`/executions/${id}`),
   executionNodes: (id: string) => request.get(`/executions/${id}/nodes`),
   executionLogs: (id: string) => request.get(`/executions/${id}/logs`),
-  setExecutionTags: (id: string, tags: string[]) => request.post(`/executions/${id}/tags`, { tags }),
 
   dashboardSummary: () => request.get('/dashboard/summary'),
   dashboardTrend: (range: string) => request.get('/dashboard/trend', { params: { range } }),

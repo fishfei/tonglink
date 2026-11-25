@@ -12,7 +12,18 @@ spring:
     password: ${DB_PASSWORD:}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:5}
+      minimum-idle: ${DB_MIN_IDLE:2}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:30000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT:5000}
+      # 实测：PG 服务端无 idle 超时，断链来自中间网络回收空闲 TCP 会话。
+      # 30 秒保活探测 + 5 分钟强制轮换，把「借到已断开连接」的窗口压到最小。
+      max-lifetime: ${DB_MAX_LIFETIME:300000}
+      keepalive-time: ${DB_KEEPALIVE_TIME:30000}
+      idle-timeout: ${DB_IDLE_TIMEOUT:120000}
       connection-test-query: SELECT 1
+      # 数据库短暂不可用时也先启动，由 Hikari 后台持续重连，避免 IDEA 重启卡在启动阶段
+      initialization-fail-timeout: ${DB_INIT_FAIL_TIMEOUT:-1}
+      leak-detection-threshold: ${DB_LEAK_DETECTION_THRESHOLD:60000}
   sql:
     init:
       mode: always
@@ -53,7 +64,7 @@ tonglink:
   # 流程内数据库节点的连接池（与平台元数据库池相互独立）
   jdbc:
     pool-size: ${TONGLINK_JDBC_POOL_SIZE:8}
-    max-lifetime-ms: ${TONGLINK_JDBC_MAX_LIFETIME_MS:1800000}
+    max-lifetime-ms: ${TONGLINK_JDBC_MAX_LIFETIME_MS:1500000}
     connection-timeout-ms: ${TONGLINK_JDBC_CONNECT_TIMEOUT_MS:10000}
   # 内置「测试」项目使用的 MySQL 测试库，可用环境变量覆盖
   test:

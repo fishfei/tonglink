@@ -391,3 +391,105 @@ bash scripts/deploy-lite.sh
 | 前端类型检查 + 生产构建 | `npm run build` | 通过 |
 
 > 本轮浏览器截图复核因环境安全策略不可用；改动均在工作区，未提交 Git。
+
+---
+
+## 17. 日志收尾、连接类型与连接稳定性轮（2026-11-25）
+
+| # | 问题 | 处理 | 验证 |
+|---|---|---|---|
+| 1 | 执行日志标签功能仍未达到预期 | 前端彻底移除：过滤面板标签项、列表标签徽标、详情标签编辑与保存按钮；`api.ts` 删除 `setExecutionTags`。后端标签接口保留但前端不再调用，便于后续重新设计 | 前端构建通过；代码复核 |
+| 2 | 过滤栏刷新按钮多余 | 删除刷新按钮；漏斗面板「应用」直接调用 `reloadFromFirst()`，条件立即生效并回到第一页 | 前端构建通过 |
+| 3 | 执行时间选择时过滤弹窗自动关闭 | `el-popover` 由 `trigger="click"` 改为 `manual`，按钮显式切换；面板 `@click.stop` 阻止冒泡，「应用 / 重置」才关闭 | 前端构建通过 |
+| 4 | 看板中长流程名挤压「各流程采集记录数」图表 | 横向柱图左侧留白按最长名称动态计算（110~190px），名称超过 130px 截断显示省略号，tooltip 显示完整名称；柱高随条数 240~480px | 前端构建通过 |
+| 5 | 数据源列表 ID 列过窄换行 | ID 列加宽至 240px 并加 `show-overflow-tooltip`；名称、连接类型、协议列同步收窄并加溢出提示 | 前端构建通过 |
+| 6 | 新增 OAuth2、暂时移除 OPC UA / Modbus | `CredentialTypeRegistry` 新增 oauth2（授权模式、令牌地址、Client ID / Secret、Scope、用户名密码、已有令牌），移除 opcua / modbus；`node-definitions.json` 删除两种节点；`DataSourceService` 增加 password 模式必填校验；README / INTRODUCTION / DEPLOYMENT 同步 | 集成测试断言类型列表含 oauth2 且不含 opcua / modbus；节点定义测试断言两种节点不存在 |
+| 7 | PostgreSQL 长时间运行后连接被服务端回收，IDEA 重启后仍连不上 | 平台 Hikari 增加 `min-idle=2`、`maxLifetime=25min`、`keepaliveTime=5min`、`validationTimeout=5s`、`initializationFailTimeout=-1`；节点连接池同步保活、最小空闲 1 条，PG JDBC URL 开启 `tcpKeepAlive=true` | 全量测试通过；长期保活效果待用户实际环境观察 |
+
+### 17.1 测试结果
+
+| 类别 | 命令 / 方式 | 结果 |
+|---|---|---|
+| 后端全量测试 | `mvn test`（14 模块 reactor） | **45 项全部通过**，0 失败 / 0 错误 |
+| 前端类型检查 + 生产构建 | `npm run build` | 通过（仅有既有大 chunk 提示） |
+
+> 本轮未启动前后端服务；按此前约定不重启用户取消的后台进程。改动均在工作区，未提交 Git。
+
+---
+
+## 18. PostgreSQL 断链根因定位与彻底加固（2026-11-25）
+
+### 18.1 排查过程与结论
+
+| 排查项 | 结果 |
+|---|---|
+| IDEA 运行配置 | `TongLink-pg` 使用 `DB_URL=jdbc:postgresql://192.168.3.188:5432/tonglink_studio`、`DB_POOL_SIZE=3`，没有设置 `DB_KEEPALIVE_TIME` / `DB_MAX_LIFETIME` 覆盖变量 |
+| PG 服务端参数（16.16，直连查询） | `idle_in_transaction_session_timeout=0`、`idle_session_timeout=0`、`statement_timeout=0`、`max_connections=100`、`tcp_keepalives_idle=7200s` —— 服务端不会主动回收空闲连接 |
+| 警告来源 | HikariCP 6.3.3 `PoolBase.isConnectionDead()`；日志线程 `[nio-8080-exec-1]` 说明是 HTTP 请求借连接时校验失败，Hikari 会关闭该连接并重新借一条，**属于自愈行为**，不是连接池整体失效 |
+| 根因判断 | 中间网络（局域网/NAT/防火墙）回收空闲 TCP 会话；此前 5 分钟保活窗口过长，用户请求恰好落在「连接已断、保活尚未探测」的窗口内。OS 级 TCP keepalive 默认 7200 秒，对分钟级回收无效 |
+| 配置绑定验证 | 新增集成测试直接读取 `HikariDataSource` 实际参数，确认 `application.yml` 的保活配置确实被 Spring Boot 绑定（`keepaliveTime > 0`） |
+
+### 18.2 修复措施
+
+| # | 措施 | 说明 |
+|---|---|---|
+| 1 | 平台连接池保活周期从 5 分钟缩短到 **30 秒**（Hikari 允许的最小值） | `DB_KEEPALIVE_TIME=30000`，死连接在借出前被探测并替换，窗口从 5 分钟压到 30 秒 |
+| 2 | `maxLifetime` 从 25 分钟缩短到 **5 分钟**，`idleTimeout` 从 10 分钟缩短到 **2 分钟** | `DB_MAX_LIFETIME=300000`、`DB_IDLE_TIMEOUT=120000`，主动轮换，不依赖服务端超时 |
+| 3 | 节点数据库输出连接池同步加固 | 默认 `maxLifetime=300000`，`keepaliveTime=30000`，最小空闲 1 条，PG 连接开启 `tcpKeepAlive` |
+| 4 | IDEA 运行配置补全 PG JDBC 参数 | `DB_URL` 追加 `?tcpKeepAlive=true&connectTimeout=5&socketTimeout=30`，避免网络静默丢包时请求无限挂起 |
+| 5 | 启动时打印实际生效的池参数 | `DataInitializer` 输出 `keepalive / maxLifetime / minimumIdle / maxPool / validationTimeout`，可在 IDEA 控制台直接确认没有被旧环境变量覆盖 |
+| 6 | 增加配置回归测试 | `IntegrationTest.连接池保活参数已生效` 断言保活周期 ≤60 秒、最大存活 ≤10 分钟，防止配置回退 |
+
+### 18.3 真实 PG 容断验证
+
+针对 `192.168.3.188:5432/tonglink_studio` 运行独立压测（HikariCP 6.3.3 + PG JDBC 42.7.11）：
+
+1. 用新配置创建连接池，取到后端 PID `22788`；
+2. 通过管理员连接执行 `pg_terminate_backend(22788)` 模拟连接被外部掐断；
+3. 等待 35 秒让保活任务运行；
+4. 连续 5 次通过池执行 `SELECT 1`：**全部成功**，池连接数由 1 自动恢复到 2。
+
+结论：即使连接被强制掐断，应用请求不会失败，池会自动重建连接。此前看到的 WARN 是 Hikari 在替换死连接时打印的自愈日志。
+
+### 18.4 测试结果
+
+| 类别 | 命令 / 方式 | 结果 |
+|---|---|---|
+| 后端全量测试 | `mvn test`（14 模块 reactor） | **46 项全部通过**，0 失败 / 0 错误 |
+| PG 容断压测 | 真实 PG + `pg_terminate_backend` + 30 秒保活 | 5 次查询全部成功，池自动恢复 |
+
+> 若重启后控制台打印的 `keepalive` 不是 `30000`、或 WARN 伴随 `Connection is not available, request timed out` / SQL 异常，说明仍有用旧环境变量覆盖或数据库侧新故障，需要完整异常堆栈继续定位。
+
+---
+
+## 19. 定时任务借连接超时修复（2026-11-25）
+
+用户补充了完整堆栈：`ScheduleService.tick → ExecutionService.resumeDue → ExecutionRepository.dueWaits` 抛出 `CannotGetJdbcConnectionException`，根因 `HikariPool-1 - Connection is not available, request timed out after 30012ms (total=0, active=0, idle=0, waiting=6)`。
+
+### 19.1 分析
+
+| 现象 | 解释 |
+|---|---|
+| `total=0` | 池内一条连接都没有，Hikari 正在尝试重建但尚未成功 |
+| 超时恰好 30012ms | 等于 `DB_CONNECTION_TIMEOUT=30000`，说明借连接等满了整个超时窗口 |
+| Hikari 补池周期 | 默认 **30 秒**（`com.zaxxer.hikari.housekeeping.periodMs`），与借连接超时窗口完全重合；池空后第一次补池最多要等 30 秒，定时任务正好卡在这个空窗 |
+| 主程序仍可用 | 数据库在数十秒内恢复，新连接建立后 UI 请求正常；只有正在等待的定时线程抛错 |
+| IDEA 当时配置 | `DB_POOL_SIZE=3`，仅 2 条最小空闲连接，定时扫描 + 触发器对齐 + UI 请求容易同时争用 |
+
+### 19.2 修复措施
+
+| # | 措施 | 说明 |
+|---|---|---|
+| 1 | Hikari 补池周期改为 **5 秒** | 在 `TongLinkApplication.main()` 中于 Spring 启动前设置系统属性，可用 JVM 参数覆盖；池空后最快 5 秒开始补连接 |
+| 2 | `ScheduleService.tick()` 增加顶层异常兜底 | 数据库短暂不可用时只打印一条简洁 WARN 并跳过本轮，不再把异常交给 Spring `TaskUtils` 刷整屏 ERROR 堆栈 |
+| 3 | `ExternalTriggerService.reconcile()` 同样兜底 | 数据库抖动时保留已建立的消息订阅，下一轮再对齐 |
+| 4 | IDEA 运行配置池容量 3 → 8、最小空闲 2 → 4 | 给定时扫描、外部触发器对齐与 UI 请求留出余量（本地 gitignore 配置，已直接改好） |
+
+### 19.3 验证
+
+| 类别 | 命令 / 方式 | 结果 |
+|---|---|---|
+| 后端全量测试 | `mvn test`（14 模块 reactor） | **46 项全部通过**，0 失败 / 0 错误 |
+| 真实 PG 连接状态 | `pg_stat_activity` | 服务端 09:23 启动后未重启，故障时段为连接重建空窗，非数据库宕机 |
+
+> 这条异常与上一轮的 WARN 是同一类问题的两种表现：WARN 是借连接时单条死连接被替换；ERROR 是池整体暂时为空、定时任务等满 30 秒。两层修复（短保活 + 快补池 + 任务兜底）后，两者都不应再造成业务失败或日志刷屏。

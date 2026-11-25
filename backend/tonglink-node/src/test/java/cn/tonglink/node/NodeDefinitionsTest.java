@@ -40,6 +40,8 @@ class NodeDefinitionsTest {
         }
         Map<String, Object> delay = (Map<String, Object>) schemas.get("logic:delay");
         assertTrue(delay.get("note").toString().contains("异步"));
+        assertTrue(!schemas.containsKey("source:opcua") && !schemas.containsKey("source:modbus"),
+                "OPC UA / Modbus 节点已暂时下线，不应再出现在节点定义中");
 
         List<Map<String, Object>> market = (List<Map<String, Object>>) root.get("market");
         assertTrue(market.stream().allMatch(m -> m.get("runtime") instanceof Map<?, ?>),

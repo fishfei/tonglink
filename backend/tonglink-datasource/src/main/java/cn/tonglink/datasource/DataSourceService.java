@@ -183,7 +183,7 @@ public class DataSourceService {
                     + "?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
                     + "&connectTimeout=5000&socketTimeout=5000";
             case "PostgreSQL" -> "jdbc:postgresql://" + host + ":" + port + slashDb
-                    + "?connectTimeout=5&socketTimeout=5";
+                    + "?connectTimeout=5&socketTimeout=5&tcpKeepAlive=true";
             case "Oracle" -> "jdbc:oracle:thin:@" + host + ":" + port
                     + (database.isBlank() ? "" : ":" + database);
             case "SQL Server" -> "jdbc:sqlserver://" + host + ":" + port
@@ -410,6 +410,11 @@ public class DataSourceService {
                     && str(fields.get("database"), "").isBlank()) {
                 throw new ApiException(Codes.VALIDATION, "缺少必填参数：数据库名（服务名）");
             }
+        }
+        // OAuth 2.0 的 password 模式额外要求用户名与密码；其他模式只要求通用必填项。
+        if ("oauth2".equals(type) && "password".equals(str(fields.get("grantType"), ""))
+                && (str(fields.get("username"), "").isBlank() || str(fields.get("password"), "").isBlank())) {
+            throw new ApiException(Codes.VALIDATION, "password 模式需要填写用户名与密码");
         }
     }
 

@@ -23,6 +23,12 @@ public class TongLinkApplication {
 
     public static void main(String[] args) {
         prepareDataDirectory();
+        // Hikari 默认每 30 秒才补一次池；数据库抖动导致池空后，这个空窗正好等于
+        // 借连接超时时间，定时任务会成片报 "Connection is not available"。
+        // 提前改为 5 秒，让池在短暂不可达后快速恢复，且不影响既有 JVM 参数覆盖。
+        if (System.getProperty("com.zaxxer.hikari.housekeeping.periodMs") == null) {
+            System.setProperty("com.zaxxer.hikari.housekeeping.periodMs", "5000");
+        }
         SpringApplication.run(TongLinkApplication.class, args);
     }
 

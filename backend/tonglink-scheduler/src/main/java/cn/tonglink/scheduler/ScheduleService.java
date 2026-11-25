@@ -54,6 +54,16 @@ public class ScheduleService {
      */
     @Scheduled(fixedDelayString = "${tonglink.scheduler.interval-ms:5000}")
     public void tick() {
+        try {
+            tickInternal();
+        } catch (Exception e) {
+            // 数据库短暂不可用时跳过本轮即可；下一tick会再扫一次。
+            // 不把异常抛给 Spring 的 TaskUtils，避免刷出整屏 ERROR 堆栈。
+            log.warn("本轮定时调度跳过：数据库暂不可用（{}）", e.getMessage());
+        }
+    }
+
+    private void tickInternal() {
         LocalDateTime now = LocalDateTime.now().withNano(0);
         // 先恢复到期的延时节点，再处理定时触发；两者共用同一个执行队列
         int resumed = executionService.resumeDue();
