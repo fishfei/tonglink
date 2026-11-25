@@ -127,9 +127,16 @@ public class ExecutionService {
         }
 
         String flowName = flow.name() == null ? flow.id() : flow.name();
+        try {
+            queue.publish(id);
+        } catch (RuntimeException ex) {
+            // 队列已满/已关闭时不能留下永远卡在 PENDING 的执行记录
+            log.warn("执行入队失败，标记为失败：{}，原因：{}", id, ex.getMessage());
+            markFailed(e, "执行入队失败：" + ex.getMessage());
+            return e;
+        }
         writeLog(id, null, "INFO", "执行已入队，流程：" + flowName);
         bus.publish(id, "queued", Map.of("flowName", flowName));
-        queue.publish(id);
         return e;
     }
 
@@ -143,8 +150,7 @@ public class ExecutionService {
         int resumed = 0;
         // 兜底：进程在「删除断点 → 改回 RUNNING」之间崩溃时，执行会卡在 WAITING
         for (Execution stuck : executions.executions(null, "WAITING", 100)) {
-            if (executions.wait(stuck.id()) == null) {
-                queue.publish(stuck.id());
+            if (executions.wait(stuck.id()) == null && republish(stuck.id())) {
                 resumed++;
             }
         }
@@ -156,10 +162,22 @@ public class ExecutionService {
                 continue;
             }
             // 断点由 execute() 读取快照后删除；这里不能提前删，否则执行会从头重跑
-            queue.publish(wait.executionId());
-            resumed++;
+            if (republish(wait.executionId())) {
+                resumed++;
+            }
         }
         return resumed;
+    }
+
+    /** 重新投递失败不能中断整轮恢复，下个调度周期会再试。 */
+    private boolean republish(String executionId) {
+        try {
+            queue.publish(executionId);
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("延时执行重新入队失败：{}，{}", executionId, e.getMessage());
+            return false;
+        }
     }
 
     /**

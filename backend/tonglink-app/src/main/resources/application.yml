@@ -50,6 +50,18 @@ tonglink:
   # inmemory = 轻量/标准模式；redis = 队列模式
   queue:
     type: ${TONGLINK_QUEUE_TYPE:inmemory}
+    # 进程内队列：常驻消费者数、有界待执行队列容量、队列满时入队等待时间
+    inmemory:
+      consumers: ${TONGLINK_QUEUE_CONSUMERS:2}
+      capacity: ${TONGLINK_QUEUE_CAPACITY:10000}
+      offer-timeout-ms: ${TONGLINK_QUEUE_OFFER_TIMEOUT_MS:1000}
+    # Redis 队列：消费者数、单次批量、阻塞读时长、超时消息认领阈值与检查间隔
+    redis:
+      consumers: ${TONGLINK_REDIS_CONSUMERS:2}
+      block-ms: ${TONGLINK_REDIS_BLOCK_MS:2000}
+      batch-size: ${TONGLINK_REDIS_BATCH_SIZE:10}
+      claim-idle-ms: ${TONGLINK_REDIS_CLAIM_IDLE_MS:300000}
+      claim-interval-ms: ${TONGLINK_REDIS_CLAIM_INTERVAL_MS:60000}
   redis:
     uri: ${TONGLINK_REDIS_URI:redis://localhost:6379}
   scheduler:

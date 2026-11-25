@@ -276,7 +276,15 @@ RUNNER_BROKER_PORT=5679
 | `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 数据源中认证凭据密码字段的 AES-GCM 主密钥（变量为明文，不依赖此密钥），**生产必须修改** |
 | `TONGLINK_JWT_SECRET` | 开发用默认值 | JWT 签名密钥，**生产必须修改且足够长** |
 | `TONGLINK_QUEUE_TYPE` | `inmemory` | `inmemory`（轻量/标准）/ `redis`（队列模式） |
+| `TONGLINK_QUEUE_CONSUMERS` | `2` | 进程内队列的常驻消费者数，合法范围 1–32；单条流程仍串行执行 |
+| `TONGLINK_QUEUE_CAPACITY` | `10000` | 进程内待执行队列容量（有界，避免无界队列 OOM）；满时按 `offer-timeout-ms` 等待后明确拒绝 |
+| `TONGLINK_QUEUE_OFFER_TIMEOUT_MS` | `1000` | 队列满时入队等待毫秒数，`0` 表示立即拒绝；被拒的执行会标记为 FAILED 而不是卡在 PENDING |
 | `TONGLINK_REDIS_URI` | `redis://localhost:6379` | 仅队列模式生效 |
+| `TONGLINK_REDIS_CONSUMERS` | `2` | Redis 队列的常驻消费者数，合法范围 1–64；每个消费者使用独立连接做阻塞读 |
+| `TONGLINK_REDIS_BLOCK_MS` | `2000` | Redis 阻塞读时长，最小 100ms |
+| `TONGLINK_REDIS_BATCH_SIZE` | `10` | 每次读取/认领的消息条数，合法范围 1–100 |
+| `TONGLINK_REDIS_CLAIM_IDLE_MS` | `300000` | PEL 中消息超过该空闲时间后才认领重投，最小 10 秒；应大于正常执行时长 |
+| `TONGLINK_REDIS_CLAIM_INTERVAL_MS` | `60000` | 认领检查间隔，最小 5 秒；只由 0 号消费者执行 |
 | `TONGLINK_NODE_CMD` | `node` | Node.js 可执行文件（代码节点） |
 | `TONGLINK_PYTHON_CMD` | `python3` | Python 可执行文件（代码节点） |
 | `TONGLINK_PYTHON_FALLBACK` | `python` | Python 命令回退名 |
