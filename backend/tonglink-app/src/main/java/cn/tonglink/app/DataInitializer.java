@@ -6,7 +6,6 @@ package cn.tonglink.app;
 
 import cn.tonglink.common.IdUtil;
 import cn.tonglink.common.JsonUtil;
-import cn.tonglink.model.entity.Credential;
 import cn.tonglink.model.entity.DataSource;
 import cn.tonglink.model.entity.Execution;
 import cn.tonglink.model.entity.ExecutionLog;
@@ -22,6 +21,7 @@ import cn.tonglink.repository.ExecutionRepository;
 import cn.tonglink.repository.FlowRepository;
 import cn.tonglink.repository.MetaRepository;
 import cn.tonglink.repository.UserRepository;
+import cn.tonglink.security.CredentialTypeRegistry;
 import cn.tonglink.security.CryptoService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -36,15 +36,14 @@ import org.springframework.stereotype.Component;
 /**
  * 首次启动写入演示数据。
  *
- * <p>目标：用户第一次打开页面就能看到完整形态——3 个项目、8 个数据源、5 条凭据、
+ * <p>目标：用户第一次打开页面就能看到完整形态——3 个项目、13 个数据源（含认证配置）、
  * 3 条示例流程，以及几条历史执行记录。没有这些数据，看板、执行日志、AI 诊断
  * 全是空页面，很难判断系统是否正常工作。</p>
  *
  * <p>幂等：仅在用户表为空时执行，不会覆盖用户后续的修改。删除 {@code data/tonglink.db}
  * 即可恢复出厂状态。</p>
  *
- * <p>内置账号：admin / Admin@123、engineer / Eng@123、viewer / View@123
- * （与前端登录页的「一键填充」保持一致，点击即可登录）。</p>
+ * <p>唯一内置账号：admin / Admin@123（与前端登录页的「一键填充」保持一致）。</p>
  */
 @Component
 public class DataInitializer implements CommandLineRunner {
@@ -55,6 +54,7 @@ public class DataInitializer implements CommandLineRunner {
     private final ExecutionRepository executions;
     private final PasswordEncoder encoder;
     private final CryptoService crypto;
+    private final CredentialTypeRegistry credentialTypes;
 
     /** 是否重建演示账号；默认关闭，避免生产环境覆盖用户修改后的口令。 */
     @Value("${tonglink.auth.reset-demo-users:false}")
@@ -69,17 +69,22 @@ public class DataInitializer implements CommandLineRunner {
     private String testMysqlPassword;
 
     public DataInitializer(UserRepository users, MetaRepository meta, FlowRepository flows,
-                           ExecutionRepository executions, PasswordEncoder encoder, CryptoService crypto) {
+                           ExecutionRepository executions, PasswordEncoder encoder, CryptoService crypto,
+                           CredentialTypeRegistry credentialTypes) {
         this.users = users;
         this.meta = meta;
         this.flows = flows;
         this.executions = executions;
         this.encoder = encoder;
         this.crypto = crypto;
+        this.credentialTypes = credentialTypes;
     }
 
     @Override
     public void run(String... args) {
+        // 系统只保留 admin 一个账户：历史库里的演示角色每次启动都清理，避免残留可登录入口
+        users.deleteByUsername("engineer");
+        users.deleteByUsername("viewer");
         // 测试项目独立于演示账号初始化：老库升级后也能自动补上，且不会覆盖用户已有修改
         seedTestProject();
         if (users.count() > 0) {
@@ -113,32 +118,25 @@ public class DataInitializer implements CommandLineRunner {
                     "内置测试项目：天气入库、飞书协同与工业协议模拟场景", now, now));
         }
 
-        // 飞书与 MySQL 数据源占位：用户后续在「数据源管理」里填入真实地址和认证即可
-        ensureSource("DS-TEST-FS", "飞书多维表格（测试·待配置）", "IT", "HTTP/REST",
-                Map.of("url", "https://open.feishu.cn/open-apis",
-                        "appToken", "bascnREPLACE_ME", "tableId", "tblREPLACE_ME",
-                        "note", "填入 app_token / table_id 后同步修改飞书节点的配置"), now);
+        // 每个数据源都由类型定义，连接与认证参数在同一组字段里；节点专用参数放 config
+        ensureTypedSource("DS-TEST-FS", "飞书多维表格（测试·待配置）", "feishu", "unconfigured",
+                Map.of("appId", "请填写 appId", "appSecret", "请填写 appSecret"),
+                Map.of("appToken", "bascnREPLACE_ME", "tableId", "tblREPLACE_ME"), now);
         String jdbc = testMysqlJdbcUrl == null || testMysqlJdbcUrl.isBlank()
                 ? "jdbc:mysql://127.0.0.1:3306/weather?useSSL=false&serverTimezone=Asia/Shanghai"
                 : testMysqlJdbcUrl;
-        ensureSource("DS-TEST-MYSQL", "MySQL 天气库（内置测试库）", "IT", "MySQL",
-                Map.of("jdbcUrl", jdbc, "database", "weather", "table", "weather_forecast",
+        ensureTypedSource("DS-TEST-MYSQL", "MySQL 天气库（内置测试库）", "database", "connected",
+                Map.of("driver", "MySQL", "host", "127.0.0.1", "port", "3306", "database", "weather",
                         "username", testMysqlUsername == null ? "" : testMysqlUsername,
                         "password", testMysqlPassword == null ? "" : testMysqlPassword,
-                        "note", "内置测试库；可用 TONGLINK_TEST_MYSQL_* 环境变量覆盖"), now);
-        ensureSource("DS-TEST-MODBUS", "Modbus TCP（测试·模拟）", "OT", "Modbus TCP",
-                Map.of("host", "127.0.0.1", "port", 502, "note", "当前流程用 Python 模拟从站，可后续替换为真实设备"), now);
-        ensureSource("DS-TEST-OPCUA", "OPC UA（测试·模拟）", "OT", "OPC UA",
-                Map.of("endpoint", "opc.tcp://127.0.0.1:4840", "note", "当前流程用 Python 模拟服务端点位"), now);
-        repairTestSource();
-
-        // 演示凭据含「请填写」字样，执行器会自动降级为 simulated，不会误写外部系统
-        if (meta.credential("C-TEST-FS") == null) {
-            String raw = "{\"appId\":\"请填写 appId\",\"appSecret\":\"请填写 appSecret\"}";
-            meta.saveCredential(new Credential("C-TEST-FS", "飞书应用（测试·待配置）", "飞书应用", "测试环境",
-                    crypto.encrypt(raw), CryptoService.mask(raw),
-                    "填入真实 App ID / App Secret 后即可写入飞书多维表格", now, now));
-        }
+                        "jdbcUrl", jdbc),
+                Map.of("table", "weather_forecast"), now);
+        ensureTypedSource("DS-TEST-MODBUS", "Modbus TCP（测试·模拟）", "modbus", "unconfigured",
+                Map.of("host", "127.0.0.1", "port", "502", "unitId", "1"), Map.of(), now);
+        ensureTypedSource("DS-TEST-OPCUA", "OPC UA（测试·模拟）", "opcua", "unconfigured",
+                Map.of("endpoint", "opc.tcp://127.0.0.1:4840", "namespace", "3"), Map.of(), now);
+        ensureTypedSource("DS-TEST-FS-CRED", "飞书应用认证（测试·待配置）", "feishu", "unconfigured",
+                Map.of("appId", "请填写 appId", "appSecret", "请填写 appSecret"), Map.of(), now);
 
         String weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=22.5431&longitude=114.0579"
                 + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
@@ -179,7 +177,7 @@ public class DataInitializer implements CommandLineRunner {
                         node("w3", "code", "nodejs", "解析未来 3 天天气",
                                 Map.of("code", parseWeather, "inputMode", "整批执行"), 600, 200),
                         node("w4", "output", "feishu_bitable", "写入飞书多维表格",
-                                Map.of("credential", "C-TEST-FS", "appToken", "bascnREPLACE_ME",
+                                Map.of("credential", "DS-TEST-FS-CRED", "appToken", "bascnREPLACE_ME",
                                         "tableId", "tblREPLACE_ME", "operation", "新增记录",
                                         "fieldMapping", "{\"日期\":\"forecast_date\",\"城市\":\"city\",\"天气\":\"weather\","
                                                 + "\"最高温\":\"temp_max\",\"最低温\":\"temp_min\",\"降水概率\":\"precipitation_probability\"}",
@@ -292,39 +290,27 @@ public class DataInitializer implements CommandLineRunner {
                 "Python 模拟 OPC UA 服务端 3 个点位 → 质量戳过滤与阈值检测 → 异常通知", opcua, now);
     }
 
-    private void ensureSource(String id, String name, String category, String protocol,
-                              Map<String, Object> config, String now) {
+    /** 幂等写入内置测试数据；类型决定类别与协议，密码字段加密保存。 */
+    private void ensureTypedSource(String id, String name, String type, String status,
+                                   Map<String, Object> fields, Map<String, Object> config, String now) {
         if (meta.source(id) != null) return;
-        meta.saveSource(new DataSource(id, name, category, protocol, JsonUtil.stringify(config),
-                "unconfigured", now, now, now));
+        meta.saveSource(typedSource(id, name, type, status, fields, config, now));
     }
 
-    /**
-     * 老库升级修复：只替换仍是占位值的测试数据源配置，不覆盖用户已填好的连接信息。
-     */
-    private void repairTestSource() {
-        DataSource ds = meta.source("DS-TEST-MYSQL");
-        if (ds == null) return;
-        Map<String, Object> cfg;
-        try {
-            cfg = JsonUtil.parse(ds.configJson(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
-        } catch (Exception e) {
-            return;
+    /** 构造类型化数据源：类别/协议由类型目录推导，密码类字段统一 AES-GCM 加密。 */
+    private DataSource typedSource(String id, String name, String type, String status,
+                                   Map<String, Object> fields, Map<String, Object> config, String now) {
+        Map<String, Object> stored = new LinkedHashMap<>(fields);
+        for (String secret : credentialTypes.secretFields(type)) {
+            Object value = stored.get(secret);
+            if (value != null && !String.valueOf(value).isBlank()
+                    && !String.valueOf(value).startsWith("v1:")) {
+                stored.put(secret, crypto.encrypt(String.valueOf(value)));
+            }
         }
-        if (cfg == null) return;
-        String url = String.valueOf(cfg.getOrDefault("jdbcUrl", ""));
-        if (!url.contains("请填写") && !url.isBlank()) return;
-        String jdbc = testMysqlJdbcUrl == null || testMysqlJdbcUrl.isBlank()
-                ? "jdbc:mysql://127.0.0.1:3306/weather?useSSL=false&serverTimezone=Asia/Shanghai"
-                : testMysqlJdbcUrl;
-        cfg.put("jdbcUrl", jdbc);
-        cfg.put("database", "weather");
-        cfg.put("table", "weather_forecast");
-        cfg.put("username", testMysqlUsername == null ? "" : testMysqlUsername);
-        cfg.put("password", testMysqlPassword == null ? "" : testMysqlPassword);
-        cfg.remove("note");
-        meta.updateSource(new DataSource(ds.id(), ds.name(), ds.category(), ds.protocol(),
-                JsonUtil.stringify(cfg), "connected", ds.lastTest(), ds.createdAt(), meta.now()));
+        return new DataSource(id, name, credentialTypes.category(type),
+                credentialTypes.protocol(type, fields), JsonUtil.stringify(config), type,
+                JsonUtil.stringify(stored), status, now, now, now);
     }
 
     private void testFlow(String id, String name, String description, FlowGraph graph, String now) {
@@ -400,19 +386,15 @@ public class DataInitializer implements CommandLineRunner {
                 existing.createdAt(), meta.now()));
     }
 
-    /** 三个内置角色，密码与前端登录页的「一键填充」保持一致，避免点击填充后登录失败。 */
+    /** 唯一内置账号：admin，密码与前端登录页的「一键填充」保持一致。 */
     private void seedUsers() {
-        // 仅在显式开启时重建演示账号（启动参数 --tonglink.auth.reset-demo-users=true）。
+        // 仅在显式开启时重建内置账号（启动参数 --tonglink.auth.reset-demo-users=true）。
         // 默认关闭，生产环境用户自行设置的口令不会被覆盖。
         if (resetDemoUsers) {
             users.clear();
         }
         users.insert(new UserAccount(users.newId(), "admin",
                 encoder.encode("Admin@123"), "ADMIN", "系统管理员", true));
-        users.insert(new UserAccount(users.newId(), "engineer",
-                encoder.encode("Eng@123"), "ENGINEER", "数据工程师", true));
-        users.insert(new UserAccount(users.newId(), "viewer",
-                encoder.encode("View@123"), "VIEWER", "只读用户", true));
     }
 
     /** 项目、数据源、凭据、变量。 */
@@ -425,45 +407,43 @@ public class DataInitializer implements CommandLineRunner {
         meta.saveProject(new Project("P-003", "质量与协同", "QUALITY", "#7C3AED",
                 "质量数据与飞书协同", now, now));
 
-        source("DS-001", "OPC UA-反应釜温度", "OT", "OPC UA",
-                Map.of("endpoint", "opc.tcp://10.20.3.11:4840", "namespace", 3));
-        source("DS-002", "Modbus-产线PLC", "OT", "Modbus TCP",
-                Map.of("host", "10.20.3.20", "port", 502));
-        source("DS-003", "MQTT Broker", "OT", "MQTT",
-                Map.of("url", "mqtt://broker.factory.local:1883"));
-        source("DS-004", "MES HTTP 接口", "IT", "HTTP/REST",
-                Map.of("url", "https://mes.factory.local/api/v1"));
-        source("DS-005", "MySQL-MES", "IT", "MySQL",
-                Map.of("jdbcUrl", "jdbc:mysql://10.20.1.30:3306/mes", "database", "mes"));
-        source("DS-006", "PostgreSQL-时序", "IT", "PostgreSQL",
-                Map.of("jdbcUrl", "jdbc:postgresql://10.20.1.40:5432/telemetry", "database", "telemetry"));
-        source("DS-007", "Kafka-factory.events", "IT", "Kafka",
-                Map.of("brokers", "10.20.1.40:9092", "topic", "factory.events"));
-        source("DS-008", "飞书应用", "IT", "HTTP/REST",
-                Map.of("url", "https://open.feishu.cn/open-apis"));
+        typedSource("DS-001", "OPC UA-反应釜温度", "opcua", "connected",
+                Map.of("endpoint", "opc.tcp://10.20.3.11:4840", "namespace", "3"), Map.of(), now);
+        typedSource("DS-002", "Modbus-产线PLC", "modbus", "connected",
+                Map.of("host", "10.20.3.20", "port", "502", "unitId", "1"), Map.of(), now);
+        typedSource("DS-003", "MQTT Broker", "mqtt", "connected",
+                Map.of("uri", "tcp://broker.factory.local:1883"), Map.of(), now);
+        typedSource("DS-004", "MES HTTP 接口", "http", "connected",
+                Map.of("baseUrl", "https://mes.factory.local/api/v1"), Map.of(), now);
+        typedSource("DS-005", "MySQL-MES", "database", "connected",
+                Map.of("driver", "MySQL", "host", "10.20.1.30", "port", "3306", "database", "mes"),
+                Map.of(), now);
+        typedSource("DS-006", "PostgreSQL-时序", "database", "connected",
+                Map.of("driver", "PostgreSQL", "host", "10.20.1.40", "port", "5432", "database", "telemetry"),
+                Map.of(), now);
+        typedSource("DS-007", "Kafka-factory.events", "kafka", "connected",
+                Map.of("bootstrapServers", "10.20.1.40:9092"), Map.of("topic", "factory.events"), now);
+        typedSource("DS-008", "飞书应用", "feishu", "connected",
+                Map.of("appId", "cli_demo_app", "appSecret", "cli_demo_app_secret"), Map.of(), now);
 
-        credential("C-001", "MES_API_TOKEN", "API Key", "生产环境", "mes-token-demo-7f3a91");
-        credential("C-002", "MQTT_PASSWORD", "用户名密码", "生产环境", "mqtt-demo-pass");
-        credential("C-003", "OPC_UA_CERT", "证书", "生产环境", "opcua-cert-demo");
-        credential("C-004", "TEST_WEBHOOK_KEY", "API Key", "测试环境", "test-wh-7f3a91");
-        credential("C-005", "FEISHU_BITABLE_APP", "飞书应用", "生产环境", "cli_demo_app_secret");
+        typedSource("DS-101", "MES API Token", "api_key", "connected",
+                Map.of("apiKey", "mes-token-demo-7f3a91",
+                        "baseUrl", "https://mes.factory.local/api/v1"), Map.of(), now);
+        typedSource("DS-102", "MQTT 认证", "mqtt", "connected",
+                Map.of("uri", "tcp://127.0.0.1:1883", "username", "demo", "password", "mqtt-demo-pass"),
+                Map.of(), now);
+        typedSource("DS-103", "OPC UA 证书", "api_key", "connected",
+                Map.of("apiKey", "opcua-cert-demo"), Map.of(), now);
+        typedSource("DS-104", "测试 Webhook Key", "api_key", "connected",
+                Map.of("apiKey", "test-wh-7f3a91"), Map.of(), now);
+        typedSource("DS-105", "飞书应用（认证）", "feishu", "connected",
+                Map.of("appId", "cli_demo_app", "appSecret", "cli_demo_app_secret"), Map.of(), now);
 
         String now2 = meta.now();
         meta.saveVariable(new Variable("V-001", "温度阈值", "TEMP_THRESHOLD", "prod",
-                crypto.encrypt("85"), "global", "高温告警阈值", now2, now2));
-    }
-
-    private void source(String id, String name, String category, String protocol,
-                        Map<String, Object> config) {
-        String now = meta.now();
-        meta.saveSource(new DataSource(id, name, category, protocol, JsonUtil.stringify(config),
-                "connected", now, now, now));
-    }
-
-    private void credential(String id, String name, String type, String scope, String value) {
-        String now = meta.now();
-        meta.saveCredential(new Credential(id, name, type, scope, crypto.encrypt(value),
-                CryptoService.mask(value), "内置演示凭据", now, now));
+                "85", "global", "高温告警阈值", now2, now2));
+        meta.saveVariable(new Variable("V-002", "产线名称", "LINE_NAME", "prod",
+                "A线", "P-001", "仅车间A项目可见", now2, now2));
     }
 
     /** 三条示例流程，覆盖「采集入库」「定时计算推送」「业务系统同步」三种形态。 */
@@ -494,7 +474,7 @@ public class DataInitializer implements CommandLineRunner {
                                 Map.of("code", "result = [{'oee': 0.86, 'source': 'modbus'}]"), 650, 200),
                         node("n24", "output", "http", "HTTP 推送",
                                 Map.of("method", "POST", "url", "https://mes.factory.local/api/v1/oee",
-                                        "auth", "C-001"), 950, 200)),
+                                        "auth", "DS-101"), 950, 200)),
                 List.of(edge("e21", "n21", "n22"), edge("e22", "n22", "n23"), edge("e23", "n23", "n24")));
         saveFlow("FLOW-OEE", "P-001", "产线OEE日报",
                 "每天 08:00 读取 Modbus 寄存器并推送 MES", oee, now, 1152L, "96.8%");
@@ -507,7 +487,7 @@ public class DataInitializer implements CommandLineRunner {
                                 Map.of("connection", "DS-005", "operation", "select",
                                         "table", "plant.inspection"), 350, 200),
                         node("n53", "output", "feishu_bitable", "写入飞书",
-                                Map.of("credential", "C-005", "appToken", "bascnDemo",
+                                Map.of("credential", "DS-105", "appToken", "bascnDemo",
                                         "tableId", "tblDemo", "operation", "新增记录"), 650, 200)),
                 List.of(edge("e51", "n51", "n52"), edge("e52", "n52", "n53")));
         saveFlow("FLOW-FS", "P-003", "设备巡检记录同步飞书",

@@ -45,6 +45,12 @@ public class NodeController {
         return Result.ok(registry.market());
     }
 
+    /** 已安装包与运行时摘要，供节点管理页展示。 */
+    @GetMapping("/packages")
+    public Result<List<Map<String, Object>>> packages() {
+        return Result.ok(registry.installedPackages());
+    }
+
     /**
      * 安装节点包。
      *

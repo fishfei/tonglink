@@ -5,9 +5,7 @@
 package cn.tonglink.connector;
 
 import cn.tonglink.common.JsonUtil;
-import cn.tonglink.model.entity.Credential;
-import cn.tonglink.repository.MetaRepository;
-import cn.tonglink.security.CryptoService;
+import cn.tonglink.datasource.DataSourceService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -47,12 +45,10 @@ public class FeishuBitableExecutor implements NodeExecutor {
 
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
-    private final MetaRepository meta;
-    private final CryptoService crypto;
+    private final DataSourceService sources;
 
-    public FeishuBitableExecutor(MetaRepository meta, CryptoService crypto) {
-        this.meta = meta;
-        this.crypto = crypto;
+    public FeishuBitableExecutor(DataSourceService sources) {
+        this.sources = sources;
     }
 
     @Override
@@ -70,23 +66,21 @@ public class FeishuBitableExecutor implements NodeExecutor {
             throw new IllegalStateException("飞书节点缺少 appToken 或 tableId，请在节点配置中填写多维表格地址信息");
         }
 
-        Credential credential = credentialId.isBlank() ? null : meta.credential(credentialId);
-        if (credential == null) {
-            throw new IllegalStateException("飞书节点未选择有效凭据：请在「变量与凭据」中配置 App ID / App Secret 并在节点中选择");
+        Map<String, Object> credential = credentialId.isBlank() ? Map.of()
+                : sources.credentialFields(credentialId);
+        String appId = str(config.get("appId"));
+        if (appId.isBlank()) appId = str(credential.get("appId"));
+        String secret = str(credential.get("appSecret"));
+        if (secret.isBlank()) {
+            throw new IllegalStateException("飞书节点未选择有效凭据：请在「数据源」中配置飞书应用的 App ID / App Secret 并在节点中选择");
         }
-        String secret;
-        try {
-            secret = crypto.decrypt(credential.valueCipher());
-        } catch (Exception e) {
-            throw new IllegalStateException("飞书凭据解密失败：" + e.getMessage(), e);
-        }
-        if (secret.isBlank() || secret.startsWith("demo-") || secret.contains("EXAMPLE")
+        if (secret.startsWith("demo-") || secret.contains("EXAMPLE")
                 || secret.contains("your-") || secret.contains("请填写")) {
-            throw new IllegalStateException("飞书凭据是占位符（未配置真实 App Secret），请在「变量与凭据」中更新");
+            throw new IllegalStateException("飞书凭据是占位符（未配置真实 App Secret），请在「数据源」中更新");
         }
 
         try {
-            App app = parseApp(credential, config, secret);
+            App app = new App(appId, secret);
             if (app.appId().isBlank()) {
                 throw new IllegalStateException(
                         "飞书凭据缺少 App ID（appId），请配置为 {\"appId\":\"cli_xxx\",\"appSecret\":\"xxx\"}");
@@ -112,24 +106,6 @@ public class FeishuBitableExecutor implements NodeExecutor {
             log.warn("飞书多维表格写入失败：{}", e.getMessage());
             throw new IllegalStateException("飞书多维表格写入失败：" + e.getMessage(), e);
         }
-    }
-
-    /** 解析 App ID / App Secret，兼容 JSON 凭据与单独 Secret。 */
-    private App parseApp(Credential credential, Map<String, Object> config, String secret) {
-        try {
-            Map<String, Object> parsed = JsonUtil.parse(secret, new TypeReference<Map<String, Object>>() {
-            });
-            if (parsed != null && parsed.get("appSecret") != null) {
-                return new App(str(parsed.get("appId")), str(parsed.get("appSecret")));
-            }
-        } catch (Exception ignored) {
-            // 非 JSON 格式，按单独的 Secret 处理
-        }
-        String appId = str(config.get("appId"));
-        if (appId.isBlank() && credential.name() != null && credential.name().startsWith("cli_")) {
-            appId = credential.name();
-        }
-        return new App(appId, secret);
     }
 
     /** 用 appId/appSecret 换取 tenant_access_token。 */

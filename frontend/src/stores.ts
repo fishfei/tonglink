@@ -8,7 +8,6 @@ export const useAppStore = defineStore('app', {
     projects: [] as any[],
     projectId: localStorage.getItem('tls_project') || '',
     sources: [] as any[],
-    credentials: [] as any[],
     variables: [] as any[],
     nodeDefinitions: [] as any[]
   }),
@@ -37,9 +36,6 @@ export const useAppStore = defineStore('app', {
     },
     async loadSources() {
       this.sources = await api.sources() as any[]
-    },
-    async loadCredentials() {
-      this.credentials = await api.credentials() as any[]
     },
     async loadVariables() {
       this.variables = await api.variables() as any[]

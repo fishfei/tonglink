@@ -4,7 +4,6 @@
  */
 package cn.tonglink.repository;
 
-import cn.tonglink.model.entity.Credential;
 import cn.tonglink.model.entity.DataSource;
 import cn.tonglink.model.entity.Project;
 import cn.tonglink.model.entity.Variable;
@@ -29,12 +28,8 @@ public class MetaRepository {
 
     private static final RowMapper<DataSource> SOURCE = (rs, i) -> new DataSource(
             rs.getString("id"), rs.getString("name"), rs.getString("category"), rs.getString("protocol"),
-            rs.getString("config_json"), rs.getString("status"), rs.getString("last_test"),
-            rs.getString("created_at"), rs.getString("updated_at"));
-
-    private static final RowMapper<Credential> CREDENTIAL = (rs, i) -> new Credential(
-            rs.getString("id"), rs.getString("name"), rs.getString("type"), rs.getString("scope"),
-            rs.getString("value_cipher"), rs.getString("mask"), rs.getString("description"),
+            rs.getString("config_json"), nullToEmpty(rs.getString("credential_type")),
+            nullToEmpty(rs.getString("credential_json")), rs.getString("status"), rs.getString("last_test"),
             rs.getString("created_at"), rs.getString("updated_at"));
 
     private static final RowMapper<Variable> VARIABLE = (rs, i) -> new Variable(
@@ -91,53 +86,24 @@ public class MetaRepository {
 
     public void saveSource(DataSource s) {
         jdbc.update("""
-                INSERT INTO datasource(id,name,category,protocol,config_json,status,last_test,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?)
-                """, s.id(), s.name(), s.category(), s.protocol(), s.configJson(), s.status(),
-                s.lastTest(), s.createdAt(), s.updatedAt());
+                INSERT INTO datasource(id,name,category,protocol,config_json,credential_type,credential_json,
+                                       status,last_test,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                """, s.id(), s.name(), s.category(), s.protocol(), s.configJson(), s.credentialType(),
+                s.credentialJson(), s.status(), s.lastTest(), s.createdAt(), s.updatedAt());
     }
 
     public void updateSource(DataSource s) {
         jdbc.update("""
-                UPDATE datasource SET name=?,category=?,protocol=?,config_json=?,status=?,last_test=?,updated_at=?
+                UPDATE datasource SET name=?,category=?,protocol=?,config_json=?,credential_type=?,
+                                      credential_json=?,status=?,last_test=?,updated_at=?
                 WHERE id=?
-                """, s.name(), s.category(), s.protocol(), s.configJson(), s.status(), s.lastTest(),
-                s.updatedAt(), s.id());
+                """, s.name(), s.category(), s.protocol(), s.configJson(), s.credentialType(),
+                s.credentialJson(), s.status(), s.lastTest(), s.updatedAt(), s.id());
     }
 
     public void deleteSource(String id) {
         jdbc.update("DELETE FROM datasource WHERE id=?", id);
-    }
-
-    // ---------------- 凭据 ----------------
-
-    public List<Credential> credentials() {
-        return jdbc.query("SELECT * FROM credential ORDER BY created_at DESC", CREDENTIAL);
-    }
-
-    public Credential credential(String id) {
-        List<Credential> rows = jdbc.query("SELECT * FROM credential WHERE id=?", CREDENTIAL, id);
-        return rows.isEmpty() ? null : rows.get(0);
-    }
-
-    public void saveCredential(Credential c) {
-        jdbc.update("""
-                INSERT INTO credential(id,name,type,scope,value_cipher,mask,description,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?)
-                """, c.id(), c.name(), c.type(), c.scope(), c.valueCipher(), c.mask(),
-                c.description(), c.createdAt(), c.updatedAt());
-    }
-
-    public void updateCredential(Credential c) {
-        jdbc.update("""
-                UPDATE credential SET name=?,type=?,scope=?,value_cipher=?,mask=?,description=?,updated_at=?
-                WHERE id=?
-                """, c.name(), c.type(), c.scope(), c.valueCipher(), c.mask(), c.description(),
-                c.updatedAt(), c.id());
-    }
-
-    public void deleteCredential(String id) {
-        jdbc.update("DELETE FROM credential WHERE id=?", id);
     }
 
     // ---------------- 变量 ----------------
@@ -169,5 +135,9 @@ public class MetaRepository {
 
     public void deleteVariable(String id) {
         jdbc.update("DELETE FROM variable WHERE id=?", id);
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

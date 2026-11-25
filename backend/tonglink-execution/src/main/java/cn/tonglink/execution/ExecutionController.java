@@ -11,6 +11,7 @@ import cn.tonglink.model.entity.Execution;
 import cn.tonglink.model.entity.ExecutionLog;
 import cn.tonglink.model.entity.ExecutionNode;
 import cn.tonglink.repository.ExecutionRepository;
+import cn.tonglink.repository.FlowRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,10 +34,12 @@ public class ExecutionController {
 
     private final ExecutionService service;
     private final ExecutionRepository repo;
+    private final FlowRepository flows;
 
-    public ExecutionController(ExecutionService service, ExecutionRepository repo) {
+    public ExecutionController(ExecutionService service, ExecutionRepository repo, FlowRepository flows) {
         this.service = service;
         this.repo = repo;
+        this.flows = flows;
     }
 
     /**
@@ -71,13 +74,15 @@ public class ExecutionController {
     public Result<Map<String, Object>> page(@RequestParam(required = false) String flowId,
                                              @RequestParam(required = false) String status,
                                              @RequestParam(required = false) String tag,
+                                             @RequestParam(required = false) String timeFrom,
+                                             @RequestParam(required = false) String timeTo,
                                              @RequestParam(defaultValue = "1") int page,
                                              @RequestParam(defaultValue = "20") int size) {
         int safePage = Math.max(1, page);
         int safeSize = Math.min(Math.max(size, 1), 200);
-        long total = repo.count(flowId, status, tag);
+        long total = repo.count(flowId, status, tag, timeFrom, timeTo);
         List<Map<String, Object>> items = new ArrayList<>();
-        for (Execution e : repo.executionsPage(flowId, status, safePage, safeSize, tag)) {
+        for (Execution e : repo.executionsPage(flowId, status, safePage, safeSize, tag, timeFrom, timeTo)) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", e.id());
             item.put("flowId", e.flowId());
@@ -89,6 +94,13 @@ public class ExecutionController {
             item.put("records", e.records());
             item.put("errorSummary", e.errorSummary());
             item.put("tags", repo.tags(e.id()));
+            // 优先本次执行的图快照；老记录没有快照时按版本号取当时冻结的发布图，
+            // 保证历史流程图不随草稿或新发布版本变化。
+            String graph = repo.graph(e.id());
+            if ((graph == null || graph.isBlank()) && e.flowVersion() > 0) {
+                graph = flows.versionGraph(e.flowId(), e.flowVersion());
+            }
+            item.put("graphJson", graph);
             items.add(item);
         }
         Map<String, Object> data = Map.of(

@@ -16,6 +16,20 @@
           "title": "手动触发",
           "icon": "play",
           "color": "orange"
+        },
+        {
+          "type": "trigger",
+          "subtype": "kafka",
+          "title": "Kafka 触发器",
+          "icon": "layers",
+          "color": "orange"
+        },
+        {
+          "type": "trigger",
+          "subtype": "mqtt",
+          "title": "MQTT 触发器",
+          "icon": "cloud",
+          "color": "orange"
         }
       ]
     },
@@ -38,23 +52,9 @@
         },
         {
           "type": "source",
-          "subtype": "mqtt",
-          "title": "MQTT 订阅",
-          "icon": "cloud",
-          "color": "teal"
-        },
-        {
-          "type": "source",
           "subtype": "http",
           "title": "HTTP 请求",
           "icon": "api",
-          "color": "blue"
-        },
-        {
-          "type": "source",
-          "subtype": "kafka",
-          "title": "Kafka 消费",
-          "icon": "layers",
           "color": "blue"
         }
       ]
@@ -141,7 +141,7 @@
           "type": "logic",
           "subtype": "delay",
           "title": "延时等待",
-          "icon": "clock",
+          "icon": "hourglass",
           "color": "orange"
         }
       ]
@@ -176,11 +176,144 @@
           "title": "告警通知",
           "icon": "alert",
           "color": "green"
+        },
+        {
+          "type": "output",
+          "subtype": "kafka",
+          "title": "Kafka 输出",
+          "icon": "layers",
+          "color": "green"
+        },
+        {
+          "type": "output",
+          "subtype": "mqtt",
+          "title": "MQTT 输出",
+          "icon": "cloud",
+          "color": "green"
         }
       ]
     }
   ],
   "schemas": {
+    "trigger:kafka": {
+      "title": "Kafka 触发器",
+      "note": "流程发布后自动订阅 Topic；每条消息（或每批消息）会启动一次流程执行，消息内容作为触发器节点输出。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "Kafka 数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "同时在数据源中配置 Bootstrap Servers"
+        },
+        {
+          "key": "topic",
+          "label": "Topic",
+          "type": "text",
+          "placeholder": "factory.events",
+          "required": true
+        },
+        {
+          "key": "groupId",
+          "label": "Consumer Group",
+          "type": "text",
+          "placeholder": "tonglink-collector",
+          "required": true
+        },
+        {
+          "key": "offsetReset",
+          "label": "位点策略",
+          "type": "select",
+          "options": [
+            "earliest",
+            "latest"
+          ],
+          "default": "latest",
+          "labels": {
+            "earliest": "最早位点（从头消费历史消息）",
+            "latest": "最新位点（只消费新消息）"
+          }
+        },
+        {
+          "key": "batchSize",
+          "label": "每批消息数",
+          "type": "number",
+          "default": "10",
+          "hint": "大于 1 时一次执行处理多条消息"
+        },
+        {
+          "key": "deserializer",
+          "label": "消息格式",
+          "type": "select",
+          "options": [
+            "JSON",
+            "String"
+          ],
+          "default": "JSON"
+        }
+      ]
+    },
+    "trigger:mqtt": {
+      "title": "MQTT 触发器",
+      "note": "流程发布后自动订阅主题；每条消息到达时启动一次流程执行。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "MQTT 数据源",
+          "type": "datasource",
+          "required": true
+        },
+        {
+          "key": "topic",
+          "label": "订阅主题",
+          "type": "text",
+          "placeholder": "plant/+/temp",
+          "required": true
+        },
+        {
+          "key": "qos",
+          "label": "QoS",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2"
+          ],
+          "default": "1",
+          "labels": {
+            "0": "0 · 最多一次（最快，可能丢消息）",
+            "1": "1 · 至少一次（可能重复）",
+            "2": "2 · 恰好一次（最慢，不丢不重）"
+          }
+        },
+        {
+          "key": "clientId",
+          "label": "Client ID",
+          "type": "text",
+          "placeholder": "留空自动生成"
+        },
+        {
+          "key": "payloadFormat",
+          "label": "消息格式",
+          "type": "select",
+          "options": [
+            "JSON",
+            "原始字符串"
+          ],
+          "default": "JSON"
+        },
+        {
+          "key": "cleanSession",
+          "label": "Clean Session",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "是"
+        }
+      ]
+    },
     "trigger:schedule": {
       "title": "定时触发器",
       "note": "常用间隔可直接选择；复杂调度再切换到 Cron 表达式（秒 分 时 日 月 周）。",
@@ -444,78 +577,9 @@
         }
       ]
     },
-    "source:mqtt": {
-      "title": "MQTT 订阅节点",
-      "note": "支持通配符主题；生产环境建议启用认证并使用 TLS。",
-      "fields": [
-        {
-          "key": "datasource",
-          "label": "数据源",
-          "type": "datasource",
-          "required": true,
-          "hint": "从数据源管理中选择已配置的 MQTT Broker"
-        },
-        {
-          "key": "topic",
-          "label": "订阅主题",
-          "type": "text",
-          "placeholder": "plant/+/temp",
-          "required": true
-        },
-        {
-          "key": "qos",
-          "label": "QoS",
-          "type": "select",
-          "options": [
-            "0",
-            "1",
-            "2"
-          ],
-          "default": "1"
-        },
-        {
-          "key": "clientId",
-          "label": "Client ID",
-          "type": "text",
-          "placeholder": "留空自动生成"
-        },
-        {
-          "key": "payloadFormat",
-          "label": "消息格式",
-          "type": "select",
-          "options": [
-            "JSON",
-            "原始字符串"
-          ],
-          "default": "JSON"
-        },
-        {
-          "key": "cleanSession",
-          "label": "Clean Session",
-          "type": "select",
-          "options": [
-            "是",
-            "否"
-          ],
-          "default": "是"
-        },
-        {
-          "key": "username",
-          "label": "用户名凭据",
-          "type": "credential",
-          "hint": "从变量配置 → 凭据中选择"
-        },
-        {
-          "key": "password",
-          "label": "密码凭据",
-          "type": "credential",
-          "hint": "从变量配置 → 凭据中选择"
-        }
-      ]
-    },
     "source:http": {
       "title": "HTTP 请求节点",
-      "note": "请求头与查询参数使用 JSON 格式，敏感值请引用凭据。",
+      "note": "请求头与查询参数使用 JSON 格式，敏感值请引用数据源中的认证配置。",
       "fields": [
         {
           "key": "method",
@@ -554,8 +618,8 @@
         {
           "key": "auth",
           "label": "认证凭据",
-          "type": "credential",
-          "hint": "从变量配置 → 凭据中选择，例如 MES_API_TOKEN"
+          "type": "datasource",
+          "hint": "从数据源中选择（含认证配置），例如 MES_API_TOKEN"
         },
         {
           "key": "expectedStatus",
@@ -573,73 +637,9 @@
         }
       ]
     },
-    "source:kafka": {
-      "title": "Kafka 消费节点",
-      "note": "消费位点与分组提交策略会影响数据重复性。",
-      "fields": [
-        {
-          "key": "datasource",
-          "label": "数据源",
-          "type": "datasource",
-          "required": true,
-          "hint": "从数据源管理中选择已配置的 Kafka 连接"
-        },
-        {
-          "key": "topic",
-          "label": "Topic",
-          "type": "text",
-          "placeholder": "factory.events",
-          "required": true
-        },
-        {
-          "key": "groupId",
-          "label": "Consumer Group",
-          "type": "text",
-          "placeholder": "dfs-collector",
-          "required": true
-        },
-        {
-          "key": "offsetReset",
-          "label": "位点策略",
-          "type": "select",
-          "options": [
-            "earliest",
-            "latest"
-          ],
-          "default": "latest"
-        },
-        {
-          "key": "deserializer",
-          "label": "反序列化",
-          "type": "select",
-          "options": [
-            "JSON",
-            "String"
-          ],
-          "default": "JSON"
-        },
-        {
-          "key": "batchSize",
-          "label": "批量大小",
-          "type": "number",
-          "placeholder": "100",
-          "default": "100"
-        },
-        {
-          "key": "autoCommit",
-          "label": "自动提交位点",
-          "type": "select",
-          "options": [
-            "是",
-            "否"
-          ],
-          "default": "否"
-        }
-      ]
-    },
     "source:mysql": {
       "title": "MySQL 数据库节点",
-      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。",
+      "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。",
       "fields": [
         {
           "key": "connection",
@@ -774,7 +774,7 @@
     },
     "source:oracle": {
       "title": "Oracle 数据库节点",
-      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。 Oracle 表名通常为大写，注意引号与大小写。",
+      "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。 Oracle 表名通常为大写，注意引号与大小写。",
       "fields": [
         {
           "key": "connection",
@@ -909,7 +909,7 @@
     },
     "source:postgres": {
       "title": "PostgreSQL 数据库节点",
-      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。",
+      "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。",
       "fields": [
         {
           "key": "connection",
@@ -1044,7 +1044,7 @@
     },
     "source:sqlserver": {
       "title": "SQL Server 数据库节点",
-      "note": "支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。",
+      "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。",
       "fields": [
         {
           "key": "connection",
@@ -1392,7 +1392,7 @@
     },
     "logic:condition": {
       "title": "条件分支节点",
-      "note": "根据表达式结果将数据分流到 true / false 端口。",
+      "note": "逐条数据求值：命中走 true 端口，其余走 false 端口。复杂多路分支可串联多个条件节点。",
       "fields": [
         {
           "key": "expression",
@@ -1406,10 +1406,10 @@
           "label": "分支模式",
           "type": "select",
           "options": [
-            "二分支 (true/false)",
-            "多分支 (Switch)"
+            "二分支 (true/false)"
           ],
-          "default": "二分支 (true/false)"
+          "default": "二分支 (true/false)",
+          "hint": "多路分支请串联多个条件节点，每个节点负责一个判断条件。"
         },
         {
           "key": "unmatched",
@@ -1419,7 +1419,8 @@
             "丢弃",
             "走默认分支"
           ],
-          "default": "丢弃"
+          "default": "走默认分支",
+          "hint": "选「丢弃」时，不满足条件的数据不会进入 false 端口。"
         },
         {
           "key": "desc",
@@ -1503,7 +1504,7 @@
     },
     "logic:delay": {
       "title": "延时等待节点",
-      "note": "用于错峰写入或等待上游设备就绪。",
+      "note": "异步等待：有输入也有输出；到期后把输入原样放行给下游，不占用工作线程；单次最长 24 小时。",
       "fields": [
         {
           "key": "duration",
@@ -1519,25 +1520,123 @@
           "options": [
             "毫秒",
             "秒",
-            "分钟"
+            "分钟",
+            "小时"
           ],
           "default": "秒"
-        },
-        {
-          "key": "blockDownstream",
-          "label": "阻塞下游",
-          "type": "select",
-          "options": [
-            "是",
-            "否"
-          ],
-          "default": "是"
         },
         {
           "key": "desc",
           "label": "说明",
           "type": "text",
           "placeholder": "等待 PLC 数据就绪"
+        }
+      ]
+    },
+    "output:kafka": {
+      "title": "Kafka 输出节点",
+      "note": "把上游每一行数据作为一条消息发送到 Topic；支持 JSON 与纯文本序列化。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "Kafka 数据源",
+          "type": "datasource",
+          "required": true
+        },
+        {
+          "key": "topic",
+          "label": "Topic",
+          "type": "text",
+          "placeholder": "factory.events",
+          "required": true
+        },
+        {
+          "key": "keyField",
+          "label": "消息 Key 字段",
+          "type": "text",
+          "placeholder": "device_id"
+        },
+        {
+          "key": "serializer",
+          "label": "序列化",
+          "type": "select",
+          "options": [
+            "JSON",
+            "String"
+          ],
+          "default": "JSON"
+        },
+        {
+          "key": "acks",
+          "label": "确认级别",
+          "type": "select",
+          "options": [
+            "all",
+            "1",
+            "0"
+          ],
+          "default": "1"
+        }
+      ]
+    },
+    "output:mqtt": {
+      "title": "MQTT 输出节点",
+      "note": "把上游每一行数据发布到指定主题，支持 QoS 与 Retained。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "MQTT 数据源",
+          "type": "datasource",
+          "required": true
+        },
+        {
+          "key": "topic",
+          "label": "发布主题",
+          "type": "text",
+          "placeholder": "plant/device/cmd",
+          "required": true
+        },
+        {
+          "key": "qos",
+          "label": "QoS",
+          "type": "select",
+          "options": [
+            "0",
+            "1",
+            "2"
+          ],
+          "default": "1",
+          "labels": {
+            "0": "0 · 最多一次（最快，可能丢消息）",
+            "1": "1 · 至少一次（可能重复）",
+            "2": "2 · 恰好一次（最慢，不丢不重）"
+          }
+        },
+        {
+          "key": "retained",
+          "label": "Retained",
+          "type": "select",
+          "options": [
+            "是",
+            "否"
+          ],
+          "default": "否"
+        },
+        {
+          "key": "payloadFormat",
+          "label": "消息格式",
+          "type": "select",
+          "options": [
+            "JSON",
+            "原始字符串"
+          ],
+          "default": "JSON"
+        },
+        {
+          "key": "clientId",
+          "label": "Client ID",
+          "type": "text",
+          "placeholder": "留空自动生成"
         }
       ]
     },
@@ -1636,8 +1735,8 @@
         {
           "key": "auth",
           "label": "认证凭据",
-          "type": "credential",
-          "hint": "从变量配置 → 凭据中选择"
+          "type": "datasource",
+          "hint": "从数据源中选择（含认证配置）"
         },
         {
           "key": "bodyTemplate",
@@ -1676,12 +1775,12 @@
     },
     "output:feishu_bitable": {
       "title": "飞书多维表格节点",
-      "note": "通过飞书开放平台「多维表格」API 写入记录；需先在变量配置中创建 App ID / App Secret 凭据。",
+      "note": "通过飞书开放平台「多维表格」API 写入记录；需先在数据源中创建飞书应用认证（App ID / App Secret）。",
       "fields": [
         {
           "key": "credential",
           "label": "飞书应用凭据",
-          "type": "credential",
+          "type": "datasource",
           "required": true,
           "hint": "下拉选择已建的飞书应用凭据（App ID / App Secret）"
         },
@@ -1799,7 +1898,7 @@
     },
     "output:alert": {
       "title": "告警通知节点",
-      "note": "支持重复告警抑制，避免刷屏。",
+      "note": "渠道为邮件时，请选择邮件 SMTP 凭据并在「Webhook / 收件人」填写邮箱；支持重复告警抑制。未配置凭据时仅演示回执，不会真实发送。",
       "fields": [
         {
           "key": "channel",
@@ -1816,14 +1915,14 @@
         {
           "key": "credential",
           "label": "通知凭据",
-          "type": "credential",
-          "hint": "可选，从变量配置 → 凭据中选择"
+          "type": "datasource",
+          "hint": "邮件选 SMTP 凭据；Webhook 渠道可选 Webhook / API Key 凭据。留空则只生成模拟回执"
         },
         {
           "key": "webhook",
-          "label": "Webhook / 收件人",
+          "label": "Webhook 地址 / 收件人",
           "type": "text",
-          "placeholder": "https://qyapi.weixin.qq.com/... 或 ops@factory.local"
+          "placeholder": "邮件填 java_fish@126.com（多个用逗号分隔）；其他渠道填 Webhook URL"
         },
         {
           "key": "titleTemplate",
@@ -1897,6 +1996,9 @@
       "desc": "将采集结果写入 Redis List / Stream",
       "author": "TongLink 官方",
       "version": "1.2.0",
+      "runtime": {
+        "kind": "redis"
+      },
       "schema": {
         "title": "Redis 写入节点",
         "note": "安装后即可在节点库使用；凭据请选择已配置的 Redis 密码。",
@@ -1904,7 +2006,7 @@
           {
             "key": "credential",
             "label": "Redis 凭据",
-            "type": "credential",
+            "type": "datasource",
             "required": true
           },
           {
@@ -1944,6 +2046,9 @@
       "desc": "按measurement与tag写入时序数据",
       "author": "社区贡献 · factory-io",
       "version": "0.9.3",
+      "runtime": {
+        "kind": "influxdb"
+      },
       "schema": {
         "title": "InfluxDB 写入节点",
         "note": "支持行协议批量写入，需选择已建数据源。",
@@ -1986,6 +2091,9 @@
       "desc": "推送文本/Markdown 消息到群机器人",
       "author": "社区贡献 · ops-lab",
       "version": "1.0.1",
+      "runtime": {
+        "kind": "wecom"
+      },
       "schema": {
         "title": "企业微信机器人节点",
         "note": "Webhook 地址建议存入凭据后下拉选择。",
@@ -1993,7 +2101,7 @@
           {
             "key": "credential",
             "label": "机器人凭据",
-            "type": "credential",
+            "type": "datasource",
             "required": true
           },
           {

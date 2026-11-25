@@ -9,7 +9,9 @@ import cn.tonglink.common.JsonUtil;
 import cn.tonglink.model.entity.Execution;
 import cn.tonglink.model.entity.ExecutionLog;
 import cn.tonglink.model.entity.ExecutionNode;
+import cn.tonglink.model.entity.WaitState;
 import java.util.List;
+import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -50,6 +52,15 @@ public class ExecutionRepository {
             rs.getString("error_message"),
             rs.getInt("retry_count"));
 
+    private static final RowMapper<WaitState> WAIT_STATE = (rs, i) -> new WaitState(
+            rs.getString("id"),
+            rs.getString("execution_id"),
+            rs.getString("wait_until"),
+            rs.getInt("resume_index"),
+            rs.getString("snapshot_json"),
+            rs.getString("node_id"),
+            rs.getString("created_at"));
+
     private static final RowMapper<ExecutionLog> EXECUTION_LOG = (rs, i) -> new ExecutionLog(
             rs.getString("id"),
             rs.getString("execution_id"),
@@ -62,7 +73,6 @@ public class ExecutionRepository {
     private final JdbcTemplate jdbc;
 
     public ExecutionRepository(JdbcTemplate jdbc) {
-        SchemaMigration.ensure(jdbc);
         this.jdbc = jdbc;
     }
 
@@ -114,6 +124,11 @@ public class ExecutionRepository {
 
     /** 按条件统计执行记录总数，支持按 tag 过滤。 */
     public long count(String flowId, String status, String tag) {
+        return count(flowId, status, tag, null, null);
+    }
+
+    /** 按条件统计执行记录总数，支持标签与执行时间范围过滤。 */
+    public long count(String flowId, String status, String tag, String timeFrom, String timeTo) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(1) FROM execution WHERE 1=1");
         List<Object> args = new java.util.ArrayList<>();
         if (flowId != null && !flowId.isBlank()) {
@@ -125,6 +140,7 @@ public class ExecutionRepository {
             args.add(status);
         }
         appendTagFilter(sql, args, tag);
+        appendTimeFilter(sql, args, timeFrom, timeTo);
         Long n = jdbc.queryForObject(sql.toString(), Long.class, args.toArray());
         return n == null ? 0L : n;
     }
@@ -141,6 +157,12 @@ public class ExecutionRepository {
 
     /** 分页查询执行记录，支持按 tag 过滤。 */
     public List<Execution> executionsPage(String flowId, String status, int page, int size, String tag) {
+        return executionsPage(flowId, status, page, size, tag, null, null);
+    }
+
+    /** 分页查询执行记录，支持标签与执行时间范围过滤。 */
+    public List<Execution> executionsPage(String flowId, String status, int page, int size,
+                                          String tag, String timeFrom, String timeTo) {
         StringBuilder sql = new StringBuilder("SELECT * FROM execution WHERE 1=1");
         List<Object> args = new java.util.ArrayList<>();
         if (flowId != null && !flowId.isBlank()) {
@@ -152,17 +174,46 @@ public class ExecutionRepository {
             args.add(status);
         }
         appendTagFilter(sql, args, tag);
+        appendTimeFilter(sql, args, timeFrom, timeTo);
         sql.append(" ORDER BY start_time DESC LIMIT ? OFFSET ?");
         args.add(size);
         args.add(Math.max(0, page - 1) * size);
         return jdbc.query(sql.toString(), EXECUTION, args.toArray());
     }
 
+    private static void appendTimeFilter(StringBuilder sql, List<Object> args,
+                                         String timeFrom, String timeTo) {
+        if (timeFrom != null && !timeFrom.isBlank()) {
+            sql.append(" AND start_time>=?");
+            args.add(timeFrom.trim());
+        }
+        if (timeTo != null && !timeTo.isBlank()) {
+            sql.append(" AND start_time<=?");
+            args.add(timeTo.trim());
+        }
+    }
+
     private static void appendTagFilter(StringBuilder sql, List<Object> args, String tag) {
         if (tag != null && !tag.isBlank()) {
+            // 标签即备注：按子串模糊匹配，支持只输入部分文字搜索
             sql.append(" AND tags LIKE ?");
-            args.add("%\"" + tag.trim() + "\"%");
+            args.add("%" + tag.trim() + "%");
         }
+    }
+
+    /** 保存本次执行实际使用的流程图快照（手动运行=草稿图，定时/外部触发=发布图）。 */
+    public void saveGraph(String executionId, String graphJson) {
+        jdbc.update("""
+                INSERT INTO execution_graph(execution_id,graph_json) VALUES(?,?)
+                ON CONFLICT(execution_id) DO UPDATE SET graph_json=excluded.graph_json
+                """, executionId, graphJson);
+    }
+
+    /** 读取本次执行的图快照；老记录没有快照时返回 null。 */
+    public String graph(String executionId) {
+        List<String> rows = jdbc.query("SELECT graph_json FROM execution_graph WHERE execution_id=?",
+                (rs, i) -> rs.getString(1), executionId);
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     /** 读取一条执行记录的标签。 */
@@ -234,6 +285,62 @@ public class ExecutionRepository {
     public void saveMetric(String ts, String flowId, String nodeId, String tags, String values) {
         jdbc.update("INSERT INTO metric_point(id,ts,flow_id,node_id,tags,values_json) VALUES(?,?,?,?,?,?)",
                 IdUtil.next(), ts, flowId, nodeId, tags, values);
+    }
+
+    // ---------------- 异步等待断点 ----------------
+
+    /** 保存延时断点；同一执行只保留一条，重复延时先清掉旧断点。 */
+    public void saveWait(WaitState wait) {
+        jdbc.update("DELETE FROM execution_wait WHERE execution_id=?", wait.executionId());
+        jdbc.update("""
+                INSERT INTO execution_wait(id,execution_id,wait_until,resume_index,node_id,snapshot_json,created_at)
+                VALUES(?,?,?,?,?,?,?)
+                """, wait.id(), wait.executionId(), wait.waitUntil(), wait.resumeIndex(),
+                wait.nodeId(), wait.snapshotJson(), wait.createdAt());
+    }
+
+    public WaitState wait(String executionId) {
+        List<WaitState> rows = jdbc.query("SELECT * FROM execution_wait WHERE execution_id=?",
+                WAIT_STATE, executionId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** 查询所有已到期的断点，按到期时间升序。 */
+    public List<WaitState> dueWaits(String now) {
+        return jdbc.query("SELECT * FROM execution_wait WHERE wait_until<=? ORDER BY wait_until",
+                WAIT_STATE, now);
+    }
+
+    public void deleteWait(String executionId) {
+        jdbc.update("DELETE FROM execution_wait WHERE execution_id=?", executionId);
+    }
+
+    // ---------------- 外部触发消息 ----------------
+
+    public void saveInput(String executionId, String payloadJson) {
+        jdbc.update("""
+                INSERT INTO execution_input(execution_id,payload_json) VALUES(?,?)
+                ON CONFLICT(execution_id) DO UPDATE SET payload_json=excluded.payload_json
+                """, executionId, payloadJson);
+    }
+
+    public List<Map<String, Object>> input(String executionId) {
+        List<String> rows = jdbc.query("SELECT payload_json FROM execution_input WHERE execution_id=?",
+                (rs, i) -> rs.getString(1), executionId);
+        if (rows.isEmpty() || rows.get(0) == null || rows.get(0).isBlank()) {
+            return List.of();
+        }
+        List<Map<String, Object>> parsed = JsonUtil.parse(rows.get(0),
+                new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+        return parsed == null ? List.of() : parsed;
+    }
+
+    /** 延时节点恢复时把它从 WAITING 改为 SUCCESS，并记录真实耗时。 */
+    public void completeNode(String executionId, String nodeId, long durationMs, String outputJson) {
+        jdbc.update("""
+                UPDATE execution_node SET status='SUCCESS',duration_ms=?,output_json=?
+                WHERE execution_id=? AND node_id=? AND status='WAITING'
+                """, durationMs, outputJson, executionId, nodeId);
     }
 
     private static String nullToEmpty(String value) {

@@ -13,9 +13,10 @@ const isLogin = computed(() => route.path === '/login')
 
 const menus = [
   { path: '/dashboard', label: '数据看板' },
-  { path: '/sources', label: '数据源管理' },
+  { path: '/sources', label: '数据源' },
   { path: '/flows', label: '流程编排' },
-  { path: '/variables', label: '变量与凭据' },
+  { path: '/nodes', label: '节点管理' },
+  { path: '/variables', label: '变量' },
   { path: '/executions', label: '执行日志' },
   { path: '/ai', label: 'AI 助手' }
 ]

@@ -22,6 +22,7 @@ const props = defineProps<{
     icon?: string
     runStatus?: string
     boxSelected?: boolean
+    inputCount?: number
   }
   selected?: boolean
 }>()
@@ -33,7 +34,7 @@ const SUBTYPE_ICON: Record<string, string> = {
   mysql: 'database', oracle: 'database', postgres: 'database',
   sqlserver: 'database', mongodb: 'database',
   nodejs: 'code', python: 'code',
-  condition: 'branch', filter: 'filter', merge: 'merge', delay: 'clock',
+  condition: 'branch', filter: 'filter', merge: 'merge', delay: 'hourglass',
   timeseries: 'database', feishu_bitable: 'table', webhook: 'send', alert: 'bell'
 }
 const TYPE_ICON: Record<string, string> = {
@@ -41,6 +42,19 @@ const TYPE_ICON: Record<string, string> = {
 }
 const iconName = computed(() =>
   SUBTYPE_ICON[props.data.subtype] || TYPE_ICON[props.data.type] || 'cube')
+
+/** 条件分支必须有两个独立输出端口，才能分别连接不同的下游节点（参考 n8n 的 true/false 分支）。 */
+const isCondition = computed(() => props.data.type === 'logic' && props.data.subtype === 'condition')
+
+/** 合并节点按上游连线数量渲染独立输入端口（n8n 风格），每条连线占一个箭头位置。 */
+const isMerge = computed(() => props.data.type === 'logic' && props.data.subtype === 'merge')
+const mergeInputs = computed<number[]>(() => {
+  const count = Math.max(1, Number(props.data.inputCount) || 1)
+  return Array.from({ length: count }, (_, i) => i)
+})
+function mergeTop(index: number, total: number) {
+  return `${((index + 1) * 100) / (total + 1)}%`
+}
 </script>
 
 <template>
@@ -50,13 +64,27 @@ const iconName = computed(() =>
     :title="`${data.title}${data.summary ? ' · ' + data.summary : ''}（双击配置）`"
   >
     <div class="dflow-node">
-      <!-- 触发器没有输入连接点；其余节点左进右出 -->
-      <Handle v-if="data.type !== 'trigger'" id="in" type="target" :position="Position.Left" class="dflow-handle dflow-handle-in" />
+      <!-- 触发器没有输入连接点；合并节点按上游数量给出多个输入端口；其余节点左进右出 -->
+      <template v-if="isMerge">
+        <Handle v-for="i in mergeInputs" :key="`merge-in-${i}`" :id="`in-${i}`"
+                type="target" :position="Position.Left"
+                class="dflow-handle dflow-handle-in merge-handle"
+                :style="{ top: mergeTop(i, mergeInputs.length) }" />
+        <span v-for="i in mergeInputs" :key="`merge-tag-${i}`" v-show="mergeInputs.length > 1"
+              class="merge-port-tag" :style="{ top: mergeTop(i, mergeInputs.length) }">{{ i + 1 }}</span>
+      </template>
+      <Handle v-else-if="data.type !== 'trigger'" id="in" type="target" :position="Position.Left" class="dflow-handle dflow-handle-in" />
       <div class="dflow-node-icon"><NodeIcon :name="iconName" /></div>
       <span v-if="data.runStatus === 'SUCCESS'" class="dflow-run-badge success" title="该节点执行成功">✓</span>
       <span v-else-if="data.runStatus === 'FAILED'" class="dflow-run-badge failed" title="该节点执行失败">!</span>
       <span v-else-if="data.runStatus === 'RUNNING'" class="dflow-run-badge running" title="执行中">…</span>
-      <Handle id="out" type="source" :position="Position.Right" class="dflow-handle dflow-handle-out" />
+      <template v-if="isCondition">
+        <Handle id="true" type="source" :position="Position.Right" class="dflow-handle dflow-handle-out branch-true" :style="{ top: '38%' }" />
+        <span class="branch-tag branch-tag-true" title="条件成立的输出端口">T</span>
+        <Handle id="false" type="source" :position="Position.Right" class="dflow-handle dflow-handle-out branch-false" :style="{ top: '74%' }" />
+        <span class="branch-tag branch-tag-false" title="条件不成立的输出端口">F</span>
+      </template>
+      <Handle v-else id="out" type="source" :position="Position.Right" class="dflow-handle dflow-handle-out" />
     </div>
     <div class="dflow-node-name">{{ data.title }}</div>
   </div>
@@ -159,4 +187,41 @@ const iconName = computed(() =>
   box-shadow: 0 0 0 5px rgba(71, 85, 105, .18);
 }
 .vue-flow__handle.connectingto { background: var(--accent) !important; transform: scale(1.5); }
+/* 条件节点的两个输出端口用颜色区分，连线从各自端口拖出 */
+.dflow-handle.branch-true { border-color: #059669 !important; background: #ecfdf5 !important; }
+.dflow-handle.branch-false { border-color: #dc2626 !important; background: #fef2f2 !important; }
+.branch-tag {
+  position: absolute;
+  right: -14px;
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 13px;
+  text-align: center;
+  z-index: 2;
+  pointer-events: none;
+}
+.branch-tag-true { top: calc(38% - 7px); color: #047857; background: #d1fae5; }
+.branch-tag-false { top: calc(74% - 7px); color: #b91c1c; background: #fee2e2; }
+/* 合并节点：左侧多个输入端口按连线数量均匀分布，旁边标注序号 */
+.dflow-handle.merge-handle { border-color: #7c3aed !important; }
+.merge-port-tag {
+  position: absolute;
+  left: -13px;
+  transform: translateY(-50%);
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
+  border-radius: 3px;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+}
 </style>

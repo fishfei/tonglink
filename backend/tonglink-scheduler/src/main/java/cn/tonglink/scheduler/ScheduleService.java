@@ -55,6 +55,11 @@ public class ScheduleService {
     @Scheduled(fixedDelayString = "${tonglink.scheduler.interval-ms:5000}")
     public void tick() {
         LocalDateTime now = LocalDateTime.now().withNano(0);
+        // 先恢复到期的延时节点，再处理定时触发；两者共用同一个执行队列
+        int resumed = executionService.resumeDue();
+        if (resumed > 0) {
+            log.info("本轮恢复 {} 个延时等待中的执行", resumed);
+        }
         for (Flow flow : flows.flows()) {
             if (!"active".equals(flow.status())) {
                 continue;

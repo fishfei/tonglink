@@ -26,7 +26,7 @@
 - Docker 20.10+ 与 Docker Compose v2。
 - 生产环境建议 2 vCPU / 4GB 内存 / 40GB SSD 起。
 - 对外提供 HTTPS 时准备域名与反向代理（Nginx / Caddy / Traefik 任选）。
-- 首次启动前生成并妥善保存两个密钥（丢失后凭据无法解密）：
+- 首次启动前生成并妥善保存两个密钥（丢失后数据源密码字段无法解密）：
 
 ```bash
 # JWT 签名密钥
@@ -115,7 +115,7 @@ docker compose -f docker/docker-compose.postgres.yml up -d
 - 不设 `DB_URL`：默认 `jdbc:sqlite:./data/tonglink.db`（轻量模式）
 - 设 `DB_URL=jdbc:postgresql://host:5432/db`：Spring Boot 依据 URL 前缀自动选择 PG 驱动，无需重新打包
 
-配套变量：`DB_USER`、`DB_PASSWORD`、`DB_POOL_SIZE`（连接池大小，默认 5，PG 模式建议 20）。表结构由 `schema.sql` 在首次启动时自动创建（15 张表，SQLite/PG 通用），增量升级由跨库迁移逻辑处理，无需手工执行 DDL。
+配套变量：`DB_USER`、`DB_PASSWORD`、`DB_POOL_SIZE`（连接池大小，默认 5，PG 模式建议 20）。表结构由 `schema.sql` 在首次启动时自动创建（15 张表，SQLite/PG 通用）。项目不做旧库结构升级：结构变更请按最新脚本重建数据库并导入数据。
 
 > 注意：旧版文档中出现的 `DB_TYPE`、`QUEUE_TYPE`、`STORAGE_DIR` 变量已被废弃，代码从未读取，请勿再使用。
 
@@ -213,7 +213,7 @@ docker compose -f docker-compose.queue.yml up -d
 docker compose -f docker-compose.queue.yml up -d --scale app-worker=3
 ```
 
-注意：所有进程（web / worker）必须使用**同一个 `ENCRYPTION_KEY`**，否则 Worker 无法解密凭据。
+注意：所有进程（web / worker）必须使用**同一个 `ENCRYPTION_KEY`**，否则 Worker 无法解密数据源里的密码字段。
 
 ## 7. 外部 Runner 模式（可选增强）
 
@@ -267,7 +267,7 @@ RUNNER_BROKER_PORT=5679
 | `DB_PASSWORD` | 空 | 数据库密码 |
 | `DB_POOL_SIZE` | `5` | Hikari 连接池大小；PG 模式建议 `20` |
 | `TONGLINK_DB_PATH` | `./data/tonglink.db` | 仅 SQLite 模式生效；容器内设为 `/app/data/tonglink.db` |
-| `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 凭据/变量 AES-GCM 主密钥，**生产必须修改** |
+| `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 数据源中认证凭据密码字段的 AES-GCM 主密钥（变量为明文，不依赖此密钥），**生产必须修改** |
 | `TONGLINK_JWT_SECRET` | 开发用默认值 | JWT 签名密钥，**生产必须修改且足够长** |
 | `TONGLINK_QUEUE_TYPE` | `inmemory` | `inmemory`（轻量/标准）/ `redis`（队列模式） |
 | `TONGLINK_REDIS_URI` | `redis://localhost:6379` | 仅队列模式生效 |
@@ -285,8 +285,8 @@ RUNNER_BROKER_PORT=5679
 ## 9. 数据库与迁移
 
 - **自动建表**：首次启动时由 Spring 的 `schema.sql` 创建 15 张表（SQLite / PostgreSQL 通用 DDL），无需手工执行 SQL 或依赖 Flyway。
-- **增量升级**：Repository 启动时执行跨库迁移（`SchemaMigration`，通过 JDBC 元数据判断列是否存在后补列），老库升级不会因重复 ALTER 失败。
-- **从 lite 迁移到 standard**：在 lite 中使用「数据源/流程导出」备份 JSON，启动 standard 后逐项导入；凭据需要在新环境重新录入（主密钥不同）。
+- **结构升级**：不提供旧库迁移。按最新 `schema.sql` 建新库，再通过「数据源 / 流程导出」导入；旧版 `credential` 表不再存在，密码字段需在新环境重新录入（主密钥不同）。
+- **从 lite 迁移到 standard**：在 lite 中导出 JSON，启动 standard 后逐项导入；数据源密码字段需要在新环境重新录入（主密钥不同）。
 - **从 standard 升级到 queue**：数据库不变，只切换 profile 并增加 Redis 与 Worker，无需数据迁移。
 - 执行日志与指标按保留策略自动裁剪（默认 30 天热数据），避免无限增长。
 
@@ -301,7 +301,7 @@ docker run --rm -v tonglink-data:/data -v "$PWD":/backup alpine \
   cp /data/tonglink.db /backup/tonglink-$(date +%F).db
 ```
 
-恢复时同时需要：**数据库备份**、**`ENCRYPTION_KEY`**、**`STORAGE_DIR` 中的节点包与大对象**。三者缺一都会导致凭据不可用或数据不完整。请定期做一次恢复演练。
+恢复时同时需要：**数据库备份**、**`ENCRYPTION_KEY`**、**`STORAGE_DIR` 中的节点包与大对象**。三者缺一都会导致数据源密码字段不可用或数据不完整。请定期做一次恢复演练。
 
 ## 11. 监控与日志
 
@@ -312,7 +312,7 @@ docker run --rm -v tonglink-data:/data -v "$PWD":/backup alpine \
 
 ## 12. 安全加固清单
 
-- [ ] 修改所有内置账号默认密码，删除不需要的演示账号。
+- [ ] 修改唯一内置账号 admin 的默认密码。
 - [ ] 自行设置 `JWT_SECRET` 与 `ENCRYPTION_KEY` 并离线备份。
 - [ ] 应用端口只绑定 `127.0.0.1`，外网访问一律走反向代理 + HTTPS。
 - [ ] 数据库端口不对外暴露。
@@ -325,7 +325,7 @@ docker run --rm -v tonglink-data:/data -v "$PWD":/backup alpine \
 | 现象 | 排查方向 |
 |---|---|
 | 页面打不开 | `docker compose ps` 看容器状态；`logs app` 看启动异常；端口是否被占用 |
-| 凭据显示解密失败 | `ENCRYPTION_KEY` 与创建凭据时不一致，或备份恢复时漏了密钥 |
+| 数据源密码显示解密失败 | `ENCRYPTION_KEY` 与保存密码时不一致，或备份恢复时漏了密钥 |
 | 定时触发时间不对 | 检查 `TZ` 与容器的 `GENERIC_TIMEZONE` 是否一致 |
 | 代码节点报 module is disallowed | 白名单要配在 runner（外部模式）上，不是应用上 |
 | 队列模式任务不执行 | Worker 的 `QUEUE_TYPE` / `REDIS_HOST` 是否与 web 一致；Worker 是否与 web 共用 `ENCRYPTION_KEY` |

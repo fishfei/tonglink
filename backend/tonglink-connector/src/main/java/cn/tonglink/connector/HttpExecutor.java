@@ -5,9 +5,7 @@
 package cn.tonglink.connector;
 
 import cn.tonglink.common.JsonUtil;
-import cn.tonglink.model.entity.Credential;
-import cn.tonglink.repository.MetaRepository;
-import cn.tonglink.security.CryptoService;
+import cn.tonglink.datasource.DataSourceService;
 import java.net.InetSocketAddress;
 import java.net.ProxySelector;
 import java.net.URI;
@@ -35,13 +33,11 @@ public class HttpExecutor implements NodeExecutor {
     private static final String DEMO_HOST = "factory.local";
 
     private final HttpClient client;
-    private final MetaRepository meta;
-    private final CryptoService crypto;
+    private final DataSourceService sources;
 
-    public HttpExecutor(MetaRepository meta, CryptoService crypto,
+    public HttpExecutor(DataSourceService sources,
                         @Value("${tonglink.http.proxy:}") String configuredProxy) {
-        this.meta = meta;
-        this.crypto = crypto;
+        this.sources = sources;
         this.client = buildClient(configuredProxy);
     }
 
@@ -94,12 +90,12 @@ public class HttpExecutor implements NodeExecutor {
                     .timeout(Duration.ofSeconds(12))
                     .header("Content-Type", "application/json");
 
-            // 凭据引用：解密后以 Bearer 形式注入，日志与输出里都不会出现明文
+            // 凭据现在属于数据源：解密后以 Bearer 形式注入，日志与输出里都不会出现明文
             String credentialId = String.valueOf(config.getOrDefault("auth", ""));
             if (!credentialId.isBlank() && !"null".equals(credentialId)) {
-                Credential credential = meta.credential(credentialId);
-                if (credential != null) {
-                    builder.header("Authorization", "Bearer " + crypto.decrypt(credential.valueCipher()));
+                String token = bearerToken(sources.credentialFields(credentialId));
+                if (!token.isBlank()) {
+                    builder.header("Authorization", "Bearer " + token);
                 }
             }
 
@@ -153,5 +149,14 @@ public class HttpExecutor implements NodeExecutor {
                 .replace("{{ $json }}", first)
                 .replace("{{$json}}", first)
                 .replace("{{ $input }}", JsonUtil.stringify(input));
+    }
+
+    /** 从数据源凭据字段中取 Bearer Token。 */
+    private String bearerToken(Map<String, Object> fields) {
+        for (String key : List.of("apiKey", "token", "accessToken", "value")) {
+            Object value = fields.get(key);
+            if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value);
+        }
+        return "";
     }
 }

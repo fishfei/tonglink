@@ -5,11 +5,11 @@
 package cn.tonglink.connector;
 
 import cn.tonglink.common.JsonUtil;
+import cn.tonglink.datasource.DataSourceService;
 import cn.tonglink.model.entity.DataSource;
 import cn.tonglink.repository.MetaRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
@@ -38,9 +38,13 @@ public class JdbcExecutor implements NodeExecutor {
     private static final Logger log = LoggerFactory.getLogger(JdbcExecutor.class);
 
     private final MetaRepository meta;
+    private final DataSourceService sources;
+    private final JdbcConnectionPool pool;
 
-    public JdbcExecutor(MetaRepository meta) {
+    public JdbcExecutor(MetaRepository meta, DataSourceService sources, JdbcConnectionPool pool) {
         this.meta = meta;
+        this.sources = sources;
+        this.pool = pool;
     }
 
     @Override
@@ -64,15 +68,15 @@ public class JdbcExecutor implements NodeExecutor {
         if (source == null) {
             return simulated(context, operation, sql, "未绑定可用的数据源");
         }
-        Map<String, Object> conn = JsonUtil.parse(source.configJson(),
-                new TypeReference<Map<String, Object>>() {
-                });
-        String jdbcUrl = conn == null ? "" : String.valueOf(conn.getOrDefault("jdbcUrl", ""));
+        Map<String, Object> conn = sources.connectionFields(connectionId);
+        String jdbcUrl = String.valueOf(conn.getOrDefault("jdbcUrl", ""));
         if (jdbcUrl.isBlank()) {
             return simulated(context, operation, sql, "数据源未配置 jdbcUrl");
         }
 
-        try (Connection c = connect(jdbcUrl, conn);
+        try (Connection c = pool.borrow(jdbcUrl,
+                String.valueOf(conn.getOrDefault("username", "")),
+                String.valueOf(conn.getOrDefault("password", "")));
              Statement statement = c.createStatement()) {
             statement.setQueryTimeout(30);
             boolean hasResultSet = statement.execute(sql);
@@ -93,15 +97,6 @@ public class JdbcExecutor implements NodeExecutor {
             }
             return simulated(context, operation, sql, e.getMessage());
         }
-    }
-
-    /** 建立连接；账号密码优先取数据源配置。 */
-    private Connection connect(String jdbcUrl, Map<String, Object> conn) throws Exception {
-        String username = String.valueOf(conn.getOrDefault("username", ""));
-        String password = String.valueOf(conn.getOrDefault("password", ""));
-        return username.isBlank()
-                ? DriverManager.getConnection(jdbcUrl)
-                : DriverManager.getConnection(jdbcUrl, username, password);
     }
 
     /** 把 ResultSet 转成行列表。 */
@@ -163,7 +158,7 @@ public class JdbcExecutor implements NodeExecutor {
     /**
      * 生成 INSERT 语句。
      *
-     * <p>两种模式：配置了固定 values 时写单行（兼容旧流程）；未配置 values 且有上游输入时，
+     * <p>两种模式：配置了固定 values 时写单行；未配置 values 且有上游输入时，
      * 按 columns 把每一条输入行写成一批 VALUES。天气入库这类场景必须用后一种模式，
      * 否则 MySQL 节点只会重复写入配置里的静态占位值。</p>
      */

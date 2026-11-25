@@ -19,21 +19,22 @@
 |:---:|:---:|
 | ![数据看板](docs/screenshots/02-dashboard.png) | ![流程编排](docs/screenshots/04-flow-editor.png) |
 
-| 执行日志与节点诊断 | 数据源管理 |
+| 执行日志与节点诊断 | 数据源（类型化连接与认证） |
 |:---:|:---:|
 | ![执行日志](docs/screenshots/06-executions.png) | ![数据源管理](docs/screenshots/03-sources.png) |
 
-| AI 助手 | 变量与凭据 |
+| AI 助手 | 变量管理 |
 |:---:|:---:|
-| ![AI助手](docs/screenshots/07-ai-assistant.png) | ![变量与凭据](docs/screenshots/05-variables.png) |
+| ![AI助手](docs/screenshots/07-ai-assistant.png) | ![变量管理](docs/screenshots/05-variables.png) |
 
 ## 功能特性
 
 - **可视化流程编排**：基于 `@vue-flow/core` 的 DAG 画布，支持节点拖拽、框选多选、连线、平移缩放；定时 / 手动触发。
-- **丰富的节点**：定时触发、OPC UA / Modbus / MQTT 采集、HTTP 请求、Node.js / Python 代码节点、条件分支、数据清洗、飞书多维表格、MySQL / PostgreSQL / Oracle / MongoDB 写入等。
+- **丰富的节点**：定时 / Kafka / MQTT 触发器，OPC UA / Modbus 采集、HTTP 请求、Node.js / Python 代码节点、条件分支 / 过滤 / 合并 / 异步延时，Kafka / MQTT / 飞书多维表格 / 数据库输出等。
 - **发布与版本管理**：草稿与已发布图隔离，发布生成不可变版本快照，支持版本时间线与一键回滚；未发布流程禁止下线。
 - **执行与可观测性**：DAG 拓扑执行，节点级输入 / 输出与耗时记录，服务端分页的执行日志、标签过滤、AI 失败诊断，WebSocket 实时状态推送。
-- **数据源 / 凭据 / 变量**：统一管理连接配置，凭据使用 AES-GCM 加密存储，变量支持项目级作用域。
+- **数据源与变量**：一个数据源由一种连接类型定义，连接地址与认证信息在同一张表单里填写（OPC UA / Modbus / MQTT / Kafka / 数据库 / 飞书 / 金蝶 / HTTP / Webhook 等），类别与协议由类型自动推导；密码字段 AES-GCM 加密且只回显掩码。变量明文保存、按项目作用域隔离，可在流程中通过 `$vars` 引用。
+- **节点管理**：独立菜单，市场安装 / 卸载与本地包导入；每个包都带真实运行时（HTTP / 脚本 / Redis / 企微 / InfluxDB），安装后即可执行。
 - **AI 助手**：默认本地规则引擎即可生成流程草稿、诊断执行失败、分析数据异常；可配置 OpenAI 兼容接口切换外部模型。
 - **双数据库持久化**：SQLite 开箱即用，也可切换 PostgreSQL 支撑团队与高并发场景；同一份 jar 靠 `DB_URL` 自动选择驱动，表结构与 SQL 双库通用。
 - **全中文界面**：面向国内工业现场，菜单、提示、日志与文档均为中文。
@@ -66,6 +67,8 @@ DB_URL="jdbc:postgresql://localhost:5432/tonglink" DB_USER=tonglink DB_PASSWORD=
 
 Spring Boot 会依据 `DB_URL` 前缀自动选择 PostgreSQL 驱动，首次启动自动建表（15 张，与 SQLite 通用）。容器编排见 `docker/docker-compose.postgres.yml`，完整说明见 [`DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 5 节。
 
+> **升级说明**：项目不提供旧库结构迁移。结构变更后请按最新 `schema.sql` 重建数据库，再通过「数据源 / 流程导出」导入数据；认证信息只保存在数据源中，不再有独立凭据表。
+
 ### 前端
 
 ```bash
@@ -78,11 +81,9 @@ npm run dev
 
 | 账号 | 密码 | 角色 |
 |---|---|---|
-| admin | Admin@123 | 系统管理员 |
-| engineer | Eng@123 | 工程师 |
-| viewer | View@123 | 只读用户 |
+| admin | Admin@123 | 系统管理员（系统唯一账号） |
 
-> 生产环境请通过环境变量覆盖默认密钥（`TONGLINK_CRYPTO_KEY`、`TONGLINK_JWT_SECRET`），并修改内置账号口令。详见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)。
+> 生产环境请通过环境变量覆盖默认密钥（`TONGLINK_CRYPTO_KEY`、`TONGLINK_JWT_SECRET`），并修改 admin 口令。详见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)。
 
 ### 免构建原型
 

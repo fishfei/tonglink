@@ -15,7 +15,8 @@ import org.springframework.stereotype.Component;
 /**
  * 工业协议与输出类节点的模拟执行器。
  *
- * <p>OPC UA / Modbus / Kafka / 飞书 / 告警等节点需要现场设备或第三方凭据才能真实运行。
+ * <p>OPC UA / Modbus / 飞书等节点需要现场设备或第三方凭据才能真实运行；告警节点已由
+ * {@link AlertExecutor} 实现真实投递。
  * 轻量模式下由本执行器生成结构真实、取值合理的模拟数据，使「编排 → 运行 → 看板」
  * 整条链路可以在没有现场环境的机器上演示。真实协议接入见架构文档第 9 节。</p>
  */
@@ -26,13 +27,12 @@ public class SimulatedSourceExecutor implements NodeExecutor {
 
     /** 输出类节点的子类型前缀，这些节点只回执写入结果。 */
     private static final List<String> OUTPUT_PREFIXES = List.of(
-            "feishu", "alert", "wecom", "redis", "influxdb", "elasticsearch");
+            "feishu", "wecom", "redis", "influxdb", "elasticsearch");
 
     @Override
     public Set<String> supports() {
-        return Set.of("source:opcua", "source:modbus", "source:kafka",
-                "source:mongodb", "output:alert", "output:wecom",
-                "output:redis", "output:influxdb", "output:elasticsearch");
+        return Set.of("source:opcua", "source:modbus", "source:mongodb",
+                "output:wecom", "output:redis", "output:influxdb", "output:elasticsearch");
     }
 
     @Override

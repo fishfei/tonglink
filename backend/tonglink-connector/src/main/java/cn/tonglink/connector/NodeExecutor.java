@@ -41,15 +41,30 @@ public interface NodeExecutor {
     /**
      * 执行结果。
      *
-     * @param output 输出行
-     * @param handle 分支标识：条件节点返回 true/false，其余节点为 null
-     * @param logs   节点运行期日志（如 console.log / print），由执行引擎写入执行日志
+     * @param output   默认输出行（没有分支的节点使用）
+     * @param handle   整体分支标识：条件节点返回 true/false，其余节点为 null
+     * @param logs     节点运行期日志（如 console.log / print），由执行引擎写入执行日志
+     * @param branches 按端口分流的结果，键为端口名（如 true / false）。条件节点用它把
+     *                 每一行数据送入各自的分支，其余节点为 null
      */
-    record ExecResult(List<Map<String, Object>> output, String handle, List<String> logs) {
+    record ExecResult(List<Map<String, Object>> output, String handle, List<String> logs,
+                      Map<String, List<Map<String, Object>>> branches) {
 
         /** 兼容不产生运行期日志的执行器。 */
         public ExecResult(List<Map<String, Object>> output, String handle) {
-            this(output, handle, List.of());
+            this(output, handle, List.of(), null);
+        }
+
+        /** 兼容产生日志但不分流的执行器。 */
+        public ExecResult(List<Map<String, Object>> output, String handle, List<String> logs) {
+            this(output, handle, logs, null);
+        }
+
+        /** 构造一个只按端口分流的结果。 */
+        public static ExecResult branched(Map<String, List<Map<String, Object>>> branches) {
+            List<Map<String, Object>> all = new java.util.ArrayList<>();
+            branches.values().forEach(all::addAll);
+            return new ExecResult(all, null, List.of(), branches);
         }
     }
 

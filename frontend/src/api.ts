@@ -70,17 +70,17 @@ export const api = {
   deleteProject: (id: string) => request.delete(`/projects/${id}`),
 
   sources: (protocol?: string) => request.get('/datasources', { params: { protocol } }),
-  protocols: () => request.get('/datasources/protocols'),
   createSource: (data: any) => request.post('/datasources', data),
   updateSource: (id: string, data: any) => request.put(`/datasources/${id}`, data),
   deleteSource: (id: string) => request.delete(`/datasources/${id}`),
   testSource: (id: string) => request.post(`/datasources/${id}/test`),
+  testSourceDraft: (data: any) => request.post('/datasources/test', data),
 
-  credentials: () => request.get('/credentials'),
+  // 凭据类型归在数据源下，认证配置本身也保存在数据源里
+  credentialTypes: () => request.get('/datasources/credential-types'),
   variables: () => request.get('/variables'),
-  saveCredential: (data: any) => request.post('/credentials', data),
   saveVariable: (data: any) => request.post('/variables', data),
-  deleteCredential: (id: string) => request.delete(`/credentials/${id}`),
+  updateVariable: (id: string, data: any) => request.put(`/variables/${id}`, data),
   deleteVariable: (id: string) => request.delete(`/variables/${id}`),
 
   flows: (projectId?: string) => request.get('/flows', { params: { projectId } }),
@@ -95,6 +95,7 @@ export const api = {
 
   nodeDefinitions: () => request.get('/nodes/definitions'),
   nodeMarket: () => request.get('/nodes/market'),
+  nodePackages: () => request.get('/nodes/packages'),
   installNode: (data: any) => request.post('/nodes/install', data),
   uninstallNode: (id: string) => request.delete(`/nodes/${id}`),
 

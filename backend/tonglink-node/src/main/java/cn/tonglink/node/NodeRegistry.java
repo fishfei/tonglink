@@ -45,6 +45,9 @@ public class NodeRegistry {
     /** 可安装的扩展节点市场。 */
     private final List<Map<String, Object>> market = new ArrayList<>();
 
+    /** 节点包的运行时配置，键为 type:subtype。安装后由执行器直接消费。 */
+    private final Map<String, Map<String, Object>> runtimes = new LinkedHashMap<>();
+
     public NodeRegistry(FlowRepository repo) {
         this.repo = repo;
         loadBuiltIn();
@@ -126,15 +129,22 @@ public class NodeRegistry {
     /**
      * 注册节点包中的节点定义。
      *
-     * @param manifest 节点包清单，可含 {@code nodes} 数组；单节点时直接使用自身
+     * <p>只接受最新清单格式：每个节点必须有 {@code schema} 对象与 {@code runtime.kind}，
+     * 安装时严格校验，加载已安装包时同样校验；不再为老版本包放宽规则。</p>
+     *
+     * @param manifest 节点包清单，须含 {@code nodes} 数组
      * @param builtIn  是否内置
      * @return 本次注册的节点定义
      */
-    @SuppressWarnings("unchecked")
     public List<NodeDefinition> registerPackage(Map<String, Object> manifest, boolean builtIn) {
         List<NodeDefinition> result = new ArrayList<>();
         Object raw = manifest.get("nodes");
-        List<Object> nodes = raw instanceof List<?> list ? (List<Object>) list : List.of(manifest);
+        if (!(raw instanceof List<?> nodesRaw) || nodesRaw.isEmpty()) {
+            throw new ApiException(Codes.VALIDATION, "节点包清单缺少 nodes 定义");
+        }
+        List<Object> nodes = new ArrayList<>(nodesRaw);
+        Map<String, Object> packageRuntime = manifest.get("runtime") instanceof Map<?, ?>
+                ? JsonUtil.toMap(manifest.get("runtime")) : Map.of();
         for (Object nodeObj : nodes) {
             Map<String, Object> node = JsonUtil.toMap(nodeObj);
             String type = str(node.get("type"), "");
@@ -142,10 +152,22 @@ public class NodeRegistry {
             if (!TYPE_PATTERN.matcher(type).matches() || !SUBTYPE_PATTERN.matcher(subtype).matches()) {
                 throw new ApiException(Codes.VALIDATION, "节点 type/subtype 格式不合法：" + type + ":" + subtype);
             }
-            // 节点包既支持 {schema:{...}} 也支持把 schema 字段直接平铺
-            Map<String, Object> schema = node.get("schema") instanceof Map<?, ?>
-                    ? JsonUtil.toMap(node.get("schema"))
-                    : node;
+            Map<String, Object> runtime = node.get("runtime") instanceof Map<?, ?>
+                    ? JsonUtil.toMap(node.get("runtime")) : packageRuntime;
+            String kind = str(runtime.get("kind"), "");
+            if (kind.isBlank()) {
+                throw new ApiException(Codes.VALIDATION,
+                        "节点 " + type + ":" + subtype + " 缺少 runtime.kind，安装后无法真实执行");
+            }
+            if (!List.of("http", "script", "redis", "wecom", "influxdb").contains(kind)) {
+                throw new ApiException(Codes.VALIDATION, "不支持的运行时类型：" + kind);
+            }
+            if (!(node.get("schema") instanceof Map<?, ?>)) {
+                throw new ApiException(Codes.VALIDATION,
+                        "节点 " + type + ":" + subtype + " 缺少 schema 定义");
+            }
+            runtimes.put(type + ":" + subtype, runtime);
+            Map<String, Object> schema = JsonUtil.toMap(node.get("schema"));
             NodeDefinition def = new NodeDefinition(
                     type,
                     subtype,
@@ -181,6 +203,38 @@ public class NodeRegistry {
             throw new ApiException(Codes.NOT_FOUND, "未安装的节点类型：" + type + ":" + subtype);
         }
         return def;
+    }
+
+    /** 节点包安装后的真实运行时配置；未安装的节点返回空 Map。 */
+    public Map<String, Object> runtimeFor(String type, String subtype) {
+        Map<String, Object> runtime = runtimes.get(type + ":" + subtype);
+        return runtime == null ? Map.of() : runtime;
+    }
+
+    /** 已安装的扩展包及其运行时摘要，供节点管理页展示。 */
+    public List<Map<String, Object>> installedPackages() {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (NodePackage pkg : repo.nodePackages()) {
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("packageId", pkg.packageId());
+            view.put("version", pkg.version());
+            view.put("status", pkg.status());
+            view.put("installedAt", pkg.installedAt());
+            Map<String, Object> manifest = JsonUtil.parse(pkg.manifestJson(),
+                    new TypeReference<Map<String, Object>>() {});
+            if (manifest != null) {
+                Object runtime = manifest.get("runtime");
+                view.put("runtime", runtime == null ? Map.of() : runtime);
+                Object nodes = manifest.get("nodes");
+                if (nodes instanceof List<?> list) {
+                    view.put("nodeCount", list.size());
+                } else {
+                    view.put("nodeCount", 1);
+                }
+            }
+            result.add(view);
+        }
+        return result;
     }
 
     /** 已安装节点（与 {@link #definitions()} 等价，语义化别名）。 */
@@ -232,11 +286,28 @@ public class NodeRegistry {
         return defs;
     }
 
-    /** 卸载节点包：删除安装记录并重建扩展节点注册表。 */
+    /** 卸载节点包：可按 packageId 或节点 subtype 删除，并重建扩展节点注册表。 */
     public void uninstall(String packageId) {
-        repo.deleteNodePackage(packageId);
+        String target = repo.nodePackages().stream()
+                .filter(p -> p.packageId().equals(packageId) || manifestHasSubtype(p, packageId))
+                .map(NodePackage::packageId)
+                .findFirst()
+                .orElseThrow(() -> new ApiException(Codes.NOT_FOUND, "未安装的节点包：" + packageId));
+        repo.deleteNodePackage(target);
         definitions.entrySet().removeIf(e -> !e.getValue().builtIn());
+        runtimes.clear();
         loadInstalled();
+    }
+
+    private boolean manifestHasSubtype(NodePackage pkg, String subtype) {
+        Map<String, Object> manifest = JsonUtil.parse(pkg.manifestJson(),
+                new TypeReference<Map<String, Object>>() {});
+        if (manifest == null) return false;
+        if (subtype.equals(str(manifest.get("subtype"), ""))) return true;
+        Object nodes = manifest.get("nodes");
+        if (!(nodes instanceof List<?> list)) return false;
+        return list.stream().map(JsonUtil::toMap)
+                .anyMatch(n -> subtype.equals(str(n.get("subtype"), "")));
     }
 
     private static String str(Object value, String fallback) {

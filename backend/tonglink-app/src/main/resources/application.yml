@@ -50,6 +50,11 @@ tonglink:
   # 外网代理：IDEA 启动时若未继承 shell 的代理变量，可在这里或环境变量里指定
   http:
     proxy: ${TONGLINK_HTTP_PROXY:${HTTPS_PROXY:${https_proxy:${HTTP_PROXY:${http_proxy:}}}}}
+  # 流程内数据库节点的连接池（与平台元数据库池相互独立）
+  jdbc:
+    pool-size: ${TONGLINK_JDBC_POOL_SIZE:8}
+    max-lifetime-ms: ${TONGLINK_JDBC_MAX_LIFETIME_MS:1800000}
+    connection-timeout-ms: ${TONGLINK_JDBC_CONNECT_TIMEOUT_MS:10000}
   # 内置「测试」项目使用的 MySQL 测试库，可用环境变量覆盖
   test:
     mysql:

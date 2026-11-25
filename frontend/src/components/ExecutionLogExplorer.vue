@@ -34,6 +34,10 @@ const diagramNodes = ref<any[]>([])
 const diagramEdges = ref<any[]>([])
 const tagDraft = ref<string[]>([])
 const loading = ref(false)
+// n8n 风格过滤：漏斗按钮 + 弹出过滤面板
+const filterVisible = ref(false)
+const timeRange = ref<any[]>([])
+const selectedFlowName = ref('')
 
 // AI 诊断
 const diagnosis = ref<any>(null)
@@ -137,15 +141,55 @@ function allTags() {
   return [...set].sort()
 }
 
+function formatDateTime(value: any) {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function flowNameOf(id: string) {
+  return flows.value.find(f => f.id === id)?.name || id
+}
+
+function activeFilterCount() {
+  let n = 0
+  if (!props.fixedFlowId && flowFilter.value) n++
+  if (status.value) n++
+  if (tag.value) n++
+  if (timeRange.value?.length === 2 && timeRange.value[0] && timeRange.value[1]) n++
+  return n
+}
+
+function applyFilters() {
+  filterVisible.value = false
+  reloadFromFirst()
+}
+
+function resetFilters() {
+  flowFilter.value = props.fixedFlowId || ''
+  status.value = ''
+  tag.value = ''
+  timeRange.value = []
+  applyFilters()
+}
+
 async function load() {
   loading.value = true
   try {
-    if (!props.fixedFlowId) flows.value = await api.flows()
+    flows.value = await api.flows()
     const params: any = {
       page: page.value, size: pageSize.value, status: status.value, tag: tag.value
     }
     const fixed = props.fixedFlowId || flowFilter.value
     if (fixed) params.flowId = fixed
+    if (timeRange.value?.length === 2 && timeRange.value[0] && timeRange.value[1]) {
+      params.timeFrom = formatDateTime(timeRange.value[0])
+      params.timeTo = formatDateTime(timeRange.value[1])
+    }
     const result: any = await api.executionPage(params)
     if (page.value > (result.totalPages || 1)) {
       page.value = result.totalPages || 1
@@ -169,6 +213,7 @@ function clearSelection() {
   diagramNodes.value = []
   diagramEdges.value = []
   tagDraft.value = []
+  selectedFlowName.value = ''
   diagnosis.value = null
 }
 
@@ -189,7 +234,14 @@ async function select(row: any) {
   const statuses = runStatusMap(nodeRows)
   try {
     const flow: any = await api.flow(row.flowId)
-    const raw = (row.flowVersion > 0 && flow.publishedGraphJson) ? flow.publishedGraphJson : flow.graphJson
+    selectedFlowName.value = flow?.name || row.flowId
+  } catch {
+    selectedFlowName.value = row.flowId
+  }
+  try {
+    // 只用本次执行冻结的图：新执行是入队时的快照，老执行是对应发布版本的图。
+    // 绝不回退到当前草稿/发布图，否则历史流程图会随编排变化。
+    const raw = row.graphJson || ''
     const graph = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {})
     diagramNodes.value = decoratedNodes((graph.nodes || []).map(toVueNode), statuses)
     diagramEdges.value = decoratedEdges((graph.connections || []).map((e: any) =>
@@ -204,15 +256,12 @@ async function saveTags() {
   if (!selected.value) return
   const id = selected.value.id
   const tags: string[] = await api.setExecutionTags(id, tagDraft.value)
-  // 以服务端结果为准重新拉当前页：确保左侧列表与右侧详情都立刻带上标签，
-  // 避免只改了内存里的选中对象、翻页或被定时刷新覆盖后又"消失"。
-  await load()
+  // 立即回写左侧列表行与右侧选中对象：整页重载会在过滤态或翻页后把目标行换掉，
+  // 导致刚保存的标签看起来「没显示」。
   const row = list.value.find(e => e.id === id)
-  if (row) {
-    row.tags = tags
-    tagDraft.value = [...tags]
-    if (selected.value?.id !== id) await select(row)
-  }
+  if (row) row.tags = tags
+  selected.value = { ...selected.value, tags }
+  tagDraft.value = [...tags]
   ElMessage.success('标签已保存')
 }
 
@@ -246,41 +295,70 @@ defineExpose({ refresh: load })
 <template>
   <div class="log-explorer log-explorer-host">
     <div class="log-filter-bar">
-      <el-select v-if="!fixedFlowId" v-model="flowFilter" placeholder="全部流程" clearable filterable
-                 size="small" style="width:210px" @change="reloadFromFirst">
-        <el-option v-for="f in flows" :key="f.id" :label="f.name" :value="f.id" />
-      </el-select>
-      <span v-else class="log-scope-label">当前流程：{{ store.projects.length ? (flows.find(f => f.id === fixedFlowId)?.name || fixedFlowId) : fixedFlowId }}</span>
-      <el-select v-model="status" placeholder="全部状态" clearable size="small" style="width:130px" @change="reloadFromFirst">
-        <el-option label="成功" value="SUCCESS" />
-        <el-option label="失败" value="FAILED" />
-        <el-option label="运行中" value="RUNNING" />
-      </el-select>
-      <el-select v-model="tag" placeholder="按标签过滤" clearable filterable size="small" style="width:150px" @change="reloadFromFirst">
-        <el-option v-for="t in allTags()" :key="t" :label="'#' + t" :value="t" />
-      </el-select>
+      <span v-if="fixedFlowId" class="log-scope-label">当前流程：{{ flowNameOf(fixedFlowId) }}</span>
+      <el-popover v-model:visible="filterVisible" placement="bottom-start" :width="330" trigger="click">
+        <template #reference>
+          <button type="button" class="log-filter-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+            过滤<span v-if="activeFilterCount()" class="filter-count">{{ activeFilterCount() }}</span>
+          </button>
+        </template>
+        <div class="filter-panel">
+          <div class="filter-field">
+            <label>流程名称</label>
+            <el-select v-if="!fixedFlowId" v-model="flowFilter" placeholder="全部流程" clearable filterable size="small" style="width:100%">
+              <el-option v-for="f in flows" :key="f.id" :label="f.name" :value="f.id" />
+            </el-select>
+            <div v-else class="filter-fixed">{{ flowNameOf(fixedFlowId) }}</div>
+          </div>
+          <div class="filter-field">
+            <label>状态</label>
+            <el-select v-model="status" placeholder="全部状态" clearable size="small" style="width:100%">
+              <el-option label="成功" value="SUCCESS" />
+              <el-option label="失败" value="FAILED" />
+              <el-option label="运行中" value="RUNNING" />
+            </el-select>
+          </div>
+          <div class="filter-field">
+            <label>标签</label>
+            <el-input v-model="tag" placeholder="输入标签文字" clearable size="small" @keyup.enter="applyFilters" />
+          </div>
+          <div class="filter-field">
+            <label>执行时间</label>
+            <el-date-picker v-model="timeRange" type="datetimerange" range-separator="至"
+                            start-placeholder="开始时间" end-placeholder="结束时间"
+                            size="small" style="width:100%" format="YYYY-MM-DD HH:mm:ss"
+                            value-format="YYYY-MM-DD HH:mm:ss" />
+          </div>
+          <div class="filter-panel-foot">
+            <el-button size="small" @click="resetFilters">重置</el-button>
+            <el-button size="small" type="primary" @click="applyFilters">应用</el-button>
+          </div>
+        </div>
+      </el-popover>
       <el-button size="small" @click="reloadFromFirst">刷新</el-button>
       <span class="muted">共 {{ total }} 条{{ fixedFlowId ? ' · 仅当前流程' : ' · 全部流程' }}</span>
     </div>
     <div class="log-explorer-body">
       <div class="log-list-pane">
         <div class="pane-title">执行记录</div>
-        <div v-for="row in list" :key="row.id" class="log-row"
-             :class="{ active: selected?.id === row.id }" @click="select(row)">
-          <div class="log-row-top">
-            <el-tag :type="statusTag(row.status)" size="small">{{ row.status }}</el-tag>
-            <span class="log-row-id">{{ row.id }}</span>
+        <div class="log-rows">
+          <div v-for="row in list" :key="row.id" class="log-row"
+               :class="{ active: selected?.id === row.id }" @click="select(row)">
+            <div class="log-row-top">
+              <el-tag :type="statusTag(row.status)" size="small">{{ row.status }}</el-tag>
+              <el-tooltip v-if="row.tags?.length" :content="row.tags.join('、')" placement="top" :show-after="300">
+                <span class="log-row-tags-inline">{{ row.tags.join('、') }}</span>
+              </el-tooltip>
+            </div>
+            <div class="muted log-row-meta">{{ row.startTime }} · {{ row.records }} 条 · {{ row.triggerType }}</div>
           </div>
-          <div class="muted log-row-meta">{{ row.startTime }} · {{ row.records }} 条 · {{ row.triggerType }}</div>
-          <div v-if="row.tags?.length" class="log-row-tags">
-            <span v-for="t in row.tags" :key="t" class="log-row-tag" :style="tagStyle(t)">#{{ t }}</span>
-          </div>
+          <el-empty v-if="!list.length" description="暂无执行记录" :image-size="50" />
         </div>
-        <el-empty v-if="!list.length" description="暂无执行记录" :image-size="50" />
         <div class="pagination-bar">
           <el-pagination v-model:current-page="page" v-model:page-size="pageSize"
                          :total="total" :page-sizes="[10, 20, 50, 100]"
-                         layout="total, sizes, prev, pager, next, jumper"
+                         layout="total, sizes, prev, next, jumper"
                          background small @current-change="load" @size-change="reloadFromFirst" />
         </div>
       </div>
@@ -288,7 +366,7 @@ defineExpose({ refresh: load })
         <template v-if="selected">
           <div class="log-detail-head">
             <div>
-              <div class="pane-title" style="margin:0">流程图 · 节点状态（成功节点打勾、成功链路绿色）</div>
+              <div class="pane-title" style="margin:0">{{ selectedFlowName || selected.flowId }}</div>
               <div v-if="selected.tags?.length" class="log-row-tags">
                 <span v-for="t in selected.tags" :key="t" class="log-row-tag" :style="tagStyle(t)">#{{ t }}</span>
               </div>

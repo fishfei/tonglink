@@ -1,6 +1,6 @@
 # TongLink Studio 架构设计（v0.2 · 决策确认版）
 
-> 本文是把交互原型落地为开源工程的设计基线。原型里已确定的契约（项目 → 流程两级、DAG 画布、Schema 驱动属性面板、数据源/凭据下拉、节点可安装）在本文中被保留并升级为前后端共享的正式契约。
+> 本文是把交互原型落地为开源工程的设计基线。原型里已确定的契约（项目 → 流程两级、DAG 画布、Schema 驱动属性面板、类型驱动的数据源表单、节点可安装）在本文中被保留并升级为前后端共享的正式契约。
 >
 > 本版已按用户确认的 9 项决策修订，并对标 n8n 的做法重新设计了代码节点运行与容器部署形态。项目介绍见 [`INTRODUCTION.md`](INTRODUCTION.md)，部署操作见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
 
@@ -52,7 +52,7 @@ flowchart TB
 
     subgraph Business["业务层（模块化单体）"]
         AUTH["认证鉴权 / RBAC"]
-        META["项目 / 数据源 / 凭据 / 变量"]
+        META["项目 / 数据源（类型化连接与认证）/ 变量"]
         WF["流程定义与版本"]
         REG["节点注册中心"]
         SCH["调度器 Scheduler"]
@@ -113,10 +113,10 @@ flowchart TB
 
 说明：
 
-- 轻量模式使用 SQLite，标准/队列模式使用 PostgreSQL（可叠加 TimescaleDB）。**实际实现**：同一份 jar 内含两套 JDBC 驱动，由 `DB_URL` 前缀自动选择；Repository 层用 JdbcTemplate 手写通用 SQL 屏蔽方言差异，建表由 `schema.sql`（通用 DDL）完成，增量升级由跨库 `SchemaMigration` 通过 JDBC 元数据判断列是否存在后补列。TimescaleDB hypertable / 连续聚合属于可选增强，非必需；标准模式用原生 PostgreSQL 16 即可运行。
+- 轻量模式使用 SQLite，标准/队列模式使用 PostgreSQL（可叠加 TimescaleDB）。**实际实现**：同一份 jar 内含两套 JDBC 驱动，由 `DB_URL` 前缀自动选择；Repository 层用 JdbcTemplate 手写通用 SQL 屏蔽方言差异，建表由 `schema.sql`（通用 DDL）完成，结构变更按最新脚本重建数据库，不做旧库补列迁移。TimescaleDB hypertable / 连续聚合属于可选增强，非必需；标准模式用原生 PostgreSQL 16 即可运行。
 - 轻量/标准模式不需要 Redis：执行队列是进程内的 `ExecutionQueue` 实现；只有队列模式才启用 Redis Stream 版本。
 - Task Runner 默认是应用拉起的**子进程**（n8n 的 internal mode），因此单容器即可执行 Node.js/Python 代码；只有需要更强隔离时才启用外部 `runners` 容器（n8n 的 external mode）。
-- 从轻量模式迁移到标准模式只需导出/导入数据并设置 `DB_URL`（指向 PostgreSQL），业务代码不变；数据库驱动依据 URL 前缀自动切换。
+- 从轻量模式切换到标准模式按 `schema.sql` 新建 PostgreSQL 库、导入数据并设置 `DB_URL`；不提供旧库结构升级迁移，数据库驱动依据 URL 前缀自动切换。
 
 ### 1.3 技术栈总表
 
@@ -134,7 +134,7 @@ flowchart TB
 | 主库 | PostgreSQL 16 + TimescaleDB；轻量模式 SQLite | 16 | PostgreSQL / Apache-2.0 | `JSONB` 存流程定义，TimescaleDB 存执行日志与指标 |
 | 队列 | 进程内队列（默认）/ Redis Streams（队列模式） | 7+/Valkey | BSD / 视版本 | 默认零依赖，扩展时按 n8n 队列模式思路切换 |
 | 调度 | Quartz（支持 JDBC Store） | 2.5.x | Apache-2.0 | Cron + SimpleTrigger 直接覆盖「每 N 秒/分」 |
-| 安全 | Spring Security + JWT + AES-GCM | - | Apache-2.0 | 无状态 API，凭据 envelope 加密 |
+| 安全 | Spring Security + JWT + AES-GCM | - | Apache-2.0 | 无状态 API，数据源密码字段 AES-GCM 加密 |
 | AI | Spring AI（OpenAI 兼容 / Ollama） | 1.x | Apache-2.0 | Function Calling 原生，便于工具化 |
 | 可观测 | Actuator + Micrometer + OpenTelemetry | - | Apache-2.0 | 一键接 Grafana / Jaeger |
 | 文档 | springdoc-openapi | 2.x | Apache-2.0 | 自动生成 API 文档 |
@@ -158,7 +158,7 @@ frontend/
 │  ├─ router/index.ts                 # 路由 + 登录守卫 + 项目上下文
 │  ├─ api/
 │  │  ├─ request.ts                   # 统一请求、错误码、token 刷新
-│  │  └─ modules/{auth,project,source,credential,variable,flow,node,execution,ai}.ts
+│  │  └─ modules/{auth,project,source,variable,flow,node,execution,ai}.ts
 │  ├─ stores/{auth,project,source,flow,execution,ai}.ts
 │  ├─ types/{api,flow,node,schema,execution}.ts
 │  ├─ composables/
@@ -188,8 +188,8 @@ frontend/
 |---|---|---|
 | `text` / `textarea` / `number` | ElInput / ElInputNumber | 带 placeholder、required、hint |
 | `select` | ElSelect | options 来自 Schema，支持 `showWhen` 联动 |
-| `datasource` | ElSelect（**按节点协议过滤**） | 拉取 `GET /sources?protocol=...`，无匹配时引导去创建 |
-| `credential` | ElSelect | 拉取 `GET /credentials`，带「去新建」链接 |
+| `datasource` | ElSelect | 拉取 `GET /datasources`；连接类字段按节点协议过滤，认证类字段列出全部数据源。数据源本身由类型决定类别与协议，不再让用户重复填写 |
+| `credential` | ElSelect | 已并入 `datasource`；节点定义中不再出现该类型 |
 | `secret` | ElInput(type=password) | 仅本地编辑，提交后后端加密，永不回显明文 |
 | `code` | CodeMirror 6 | Node.js / Python 语言切换、语法高亮 |
 | `json` | JSON 编辑器 | 字段映射等结构化配置 |
@@ -209,7 +209,7 @@ frontend/
 **c. 状态与权限**
 
 - Pinia：`auth`（用户/角色/权限）、`project`（当前项目，持久化到 localStorage）、`flow`（当前流程草稿与脏标记）、`execution`（运行中状态）。
-- 路由守卫：`viewer` 只读（隐藏保存/运行/删除），`engineer` 可编排，`admin` 额外可管用户与系统配置。
+- 路由守卫：系统只有 `admin` 一个内置账号，拥有编排、运行与配置全部权限；未登录统一跳转登录页。
 - 顶部项目下拉是全局上下文：数据源、流程、看板都按当前项目过滤（与原型一致）。
 
 **d. 实时日志**
@@ -267,11 +267,12 @@ backend/
 |---|---|---|
 | POST | `/auth/login` `/auth/refresh` `/auth/logout` | 登录、刷新、退出 |
 | GET/POST/PUT/DELETE | `/projects` | 项目管理 |
-| GET/POST/PUT/DELETE | `/sources` | 数据源；`POST /sources/{id}/test` 测试连接；单条/全部导出 |
-| GET/POST/PUT/DELETE | `/credentials` `/variables` | 凭据与变量（凭据只返回掩码） |
+| GET/POST/PUT/DELETE | `/datasources` | 数据源（一张类型表单同时填连接与认证）；`POST /datasources/test` 保存前测试（编辑态传 `id` 时用已保存的解密密码替换掩码）、`POST /datasources/{id}/test` 测试已保存数据源；单条/全部导出 |
+| GET | `/datasources/credential-types` | 连接/认证类型目录，含字段定义、类别与协议；前端据此渲染唯一一张表单 |
+| GET/POST/PUT/DELETE | `/variables` | 变量（明文、按项目隔离，无历史密文兼容） |
 | GET/POST/PUT/DELETE | `/flows` | 流程；`POST /flows/{id}/publish` 发布版本；`POST /flows/import` 导入 |
 | GET | `/nodes/definitions` | **已安装节点定义 + Schema**（前端节点库与表单的数据源） |
-| POST | `/nodes/install` `/nodes/{id}/uninstall` | 安装/卸载节点包 |
+| POST/DELETE | `/nodes/install` `/nodes/{packageId}` `/nodes/packages` | 安装/卸载节点包、查看已安装包与运行时 |
 | POST | `/flows/{id}/run` | 手动执行；返回 executionId |
 | GET | `/executions` `/executions/{id}` `/executions/{id}/logs` | 执行列表、详情、日志 |
 | GET | `/dashboard/summary` `/dashboard/trend` | 看板聚合 |
@@ -289,9 +290,8 @@ backend/
 |---|---|---|
 | `sys_user` / `sys_role` / `sys_user_role` | id, username, password_hash, role | 内置账号，BCrypt |
 | `project` | id, name, code, color, description | 项目分类 |
-| `datasource` | id, name, category(IT/OT), protocol, config_json, status | `config_json` 按协议存连接参数；协议枚举驱动节点数据源过滤 |
-| `credential` | id, name, type, scope, dek_cipher, value_cipher, mask | Envelope 加密，永不返回明文 |
-| `variable` | id, name, key, env, value_cipher, scope | 环境变量/全局变量 |
+| `datasource` | id, name, category(IT/OT), protocol, config_json, credential_type, credential_json, status | `credential_type` 唯一决定类别与协议；连接与认证参数同在 `credential_json`，密码字段 AES-GCM 加密；`config_json` 只放节点专用附加参数 |
+| `variable` | id, name, key, env, value_cipher, scope | 明文直接存 `value_cipher` 字段（无前缀、无解密兼容）；scope 为 `all` 或逗号分隔的项目 ID |
 | `flow_definition` | id, project_id, name, draft_graph, published_version, status | 草稿与当前发布版本分离 |
 | `flow_version` | id, flow_id, version, graph_json, changelog | 不可变快照，执行时锁定版本 |
 | `node_package` | id, package_id, version, manifest_json, file_path, status, installed_at | 插件安装记录，支持多版本并存 |
@@ -368,7 +368,7 @@ backend/
     "title": "MySQL 查询节点",
     "note": "支持 select / insert / update / delete / execute",
     "fields": [
-      { "key": "connection", "label": "连接数据源", "type": "datasource", "protocols": ["MySQL"], "required": true },
+      { "key": "connection", "label": "连接数据源", "type": "datasource", "required": true },
       { "key": "operation", "label": "操作类型", "type": "select",
         "options": ["select", "insert", "update", "delete", "execute"], "default": "select" },
       { "key": "sql", "label": "SQL 语句", "type": "code", "language": "sql" },
@@ -379,7 +379,7 @@ backend/
 }
 ```
 
-- `protocols` 字段让前端自动按节点类型过滤数据源（对应原型第四轮改动）。
+- 节点配置中的 `datasource` 字段由前端按节点 subtype 过滤候选（见 `utils/graph.ts`）；数据源自身的协议由连接类型推导。
 - `showWhen` 让字段按操作类型联动（对应原型第二轮数据库节点）。
 - `nodeVersion` 随流程快照保存；注册中心保留多版本实现，执行时用记录中的版本，避免升级插件导致老流程行为改变。
 
@@ -497,38 +497,47 @@ n8n **确实**把 Code 节点的用户代码放到独立进程执行，并不是
 
 ## 8. 节点插件机制
 
-这是「节点后续可单独安装」的正式设计，也是与原型节点包 JSON 契约的对齐点。
+节点管理是独立菜单页，安装的是**可执行的节点包**，不是只有表单的占位节点。
 
 ### 8.1 节点包结构
 
-```
-my-node-1.0.0.zip
-├─ manifest.json          # 标识、版本、runtime、依赖、兼容性
-├─ schema.json            # configSchema（与第 5.2 节一致）
-├─ icon.svg
-├─ i18n/{zh-CN,en-US}.json
-└─ dist/                  # Java: jar；Node/Python: 代码与依赖锁文件
+节点包是单个 JSON manifest（可在节点管理页粘贴或选择文件）：
+
+```json
+{
+  "id": "pkg-demo",
+  "type": "output", "subtype": "demo", "title": "示例节点",
+  "version": "1.0.0",
+  "schema": { "title": "示例节点", "fields": [ { "key": "url", "label": "地址", "type": "text" } ] },
+  "runtime": { "kind": "http", "method": "POST", "url": "https://example.com" }
+}
 ```
 
-`manifest.json` 关键字段：`id`、`type`、`subtype`、`title`、`version`、`runtime`(java/nodejs/python)、`entry`、`minPlatformVersion`、`dependencies`、`author`、`license`、`signature`(可选)。
+`type/subtype` 决定节点在画布上的分类，与内置节点共用 `node-definitions.json` 的校验规则；
+`schema.fields` 驱动属性面板；`runtime` 决定真实执行逻辑，安装时强制校验，缺失会被拒绝。
 
 ### 8.2 安装流程
 
-1. 用户在节点管理页上传 ZIP 或选择内置市场节点。
-2. 后端校验 manifest 结构、`schemaVersion`、平台版本兼容、依赖是否满足、签名（生产可选强制）。
-3. 解压到 `plugins/{id}/{version}/`，写 `node_package` 记录（状态 `INSTALLED`）。
-4. 发布事件（进程内事件总线 / Redis Pub/Sub）；Web 与 Worker 收到后刷新本地注册中心缓存。
-5. 前端再次请求 `/nodes/definitions` 即可看到新节点，节点库、属性表单、执行器同时生效。
+1. 用户在节点管理页选择市场节点或导入本地 manifest。
+2. `NodeRegistry` 校验 type/subtype、schema 与 `runtime.kind`，只接受
+   `http / script / redis / wecom / influxdb` 五种已有后端实现的运行时。
+3. 写 `node_package` 记录并即时注册到内存注册表，无需重启。
+4. 执行引擎的 `PluginExecutor` 是动态执行器：按 `type:subtype` 查运行时配置并调用对应实现。
+   安装与加载都要求 `schema` 与 `runtime.kind`，不兼容旧格式清单；旧版 source:kafka / source:mqtt
+   节点已从节点库移除，订阅请用对应的 trigger 节点。
 
-### 8.3 运行时隔离
+### 8.3 运行时实现
 
-- **Java 节点**：实现 `NodeExecutor` SPI，用子优先 `URLClassLoader` 加载插件 jar，避免依赖冲突；卸载时关闭 classloader。禁止插件持有静态全局引用。
-- **Node.js / Python 节点**：bundle 部署到对应 runner（内部模式随应用分发，外部模式打进 runners 镜像），由 runner 注册 handler，共享第 7 节限制。
-- **多版本并存**：注册中心 key 为 `(type, subtype, nodeVersion)`；流程快照记录所用版本，老流程继续用老实现。
+- **http**：按 runtime 定义 method/url/headers/body，支持 `{{配置键}}` 与 `{{$json.字段}}` 插值。
+- **script**：复用代码节点的子进程 Runner，运行 Node.js / Python 脚本，支持 stdout 日志回传。
+- **redis**：Lettuce 连接，支持 List / Stream / String 与 TTL。
+- **wecom**：企业微信机器人 Webhook 从所选数据源的认证字段中解密读取，避免明文落在流程配置里。
+- **influxdb**：从数据源读取 URL/org/bucket/token，按行协议批量写入。
 
 ### 8.4 市场与治理
 
-社区节点通过独立 Git 仓库提交 `manifest.json` + 校验信息，PR 审核后进入索引；平台只拉索引与包，不做运行时下载。README 中给出节点包开发模板与示例。
+内置市场条目定义在 `node-definitions.json` 的 `market` 数组中，每条都必须带 `runtime`。
+社区包以 JSON 形式交换，生产环境应通过代码评审后再导入，避免运行不可信脚本。
 
 ---
 
@@ -556,13 +565,20 @@ my-node-1.0.0.zip
 - OT 读取保留质量戳（GOOD/BAD/UNCERTAIN），质量戳过滤在节点配置中声明。
 - 订阅型数据源（MQTT / OPC UA Subscription）由长驻 `event` 流程承载，数据先写 `metric_point` 再触发下游；断网续传采用本地缓冲 + 恢复重放。
 
+### 9.3 延时节点的数据语义
+
+延时节点同时具备输入与输出：执行时抛出 `WaitSignal`，引擎把进度与「节点输入」一起写入
+`execution_wait.snapshot_json`，标记执行为 `WAITING` 并释放工作线程；到期恢复时把这份输入
+原样写回该节点的 `output_json` 并放入执行上下文，下游节点因此可以拿到完整数据，而不是空列表。
+手动运行始终执行当前草稿图，定时 / 外部触发执行发布快照；条件节点按 `sourceHandle` 逐行分流。
+
 ---
 
 ## 10. 安全设计
 
 - **认证**：Spring Security + JWT（access 15min / refresh 7d），密码 BCrypt；登录失败锁定与验证码预留。
 - **授权**：RBAC 三角色（`ADMIN` / `ENGINEER` / `VIEWER`），项目级数据权限；接口用方法注解鉴权，前端路由与按钮同步收敛。
-- **凭据加密**：主密钥来自环境变量或外部 KMS；每条凭据生成独立 DEK，用主密钥加密 DEK，数据用 AES-256-GCM 加密；API 只返回掩码值。
+- **凭据加密**：主密钥来自环境变量；连接与认证参数统一保存在数据源的 `credential_json` 中，密码字段用 AES-256-GCM 单独加密，只返回掩码，非密码字段原样回显。变量直接明文保存并按项目作用域隔离，没有历史密文兼容分支。
 - **脱敏**：日志、执行输入输出、AI Prompt 三处都过脱敏过滤器；正则规则可配置。
 - **审计**：登录、凭据查看、流程发布、节点安装、手动执行写 `audit_log`。
 - **传输**：生产强制 HTTPS；WebSocket 走 WSS；CORS 白名单。
@@ -646,7 +662,7 @@ tonglink-studio/
 |---|---|---|---|
 | 1 | 工程骨架 | Monorepo、CI、三种部署配置、公共响应/异常、数据库迁移、设计系统 | 一键启动，健康检查通过 |
 | 2 | 认证与权限 | 登录/刷新/退出、三角色 RBAC、项目级数据权限、审计日志 | 三账号权限差异正确 |
-| 3 | 配置管理 | 项目、数据源（IT/OT 全协议）、凭据、变量、导入导出、单条/全部导出按名称命名 | 与原型交互一致，数据可持久化 |
+| 3 | 配置管理 | 项目、数据源（类型化连接与认证表单）、变量、导入导出、单条/全部导出按名称命名 | 与原型交互一致，数据可持久化 |
 | 4 | 流程编排 | DAG 画布（@vue-flow/core）、单击拖动/双击配置、节点库、连线校验、撤销重做、流程版本与发布、导入导出 | 与原型交互一致，JSON 可往返 |
 | 5 | 节点体系 | 触发器（秒/分/Cron）、OPC UA、Modbus、S7comm、MQTT、HTTP、5 种数据库 CRUD、Kafka、飞书多维表格、Node.js/Python 代码节点、条件/合并/延时、时序库/HTTP 推送/告警输出 | 每类节点属性由 Schema 驱动，数据库节点按操作类型联动 |
 | 6 | 执行与调度 | DAG 拓扑执行、条件分支、重试、超时、取消、进程内队列、Quartz 调度、节点级日志与采集条数 | 手动与定时执行都生成完整日志 |

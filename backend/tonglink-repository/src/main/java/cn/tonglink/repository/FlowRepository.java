@@ -55,7 +55,6 @@ public class FlowRepository {
     private final JdbcTemplate jdbc;
 
     public FlowRepository(JdbcTemplate jdbc) {
-        SchemaMigration.ensure(jdbc);
         this.jdbc = jdbc;
     }
 
@@ -115,6 +114,13 @@ public class FlowRepository {
     public void saveVersion(FlowVersion v) {
         jdbc.update("INSERT INTO flow_version(id,flow_id,version,graph_json,changelog,created_at) VALUES(?,?,?,?,?,?)",
                 v.id(), v.flowId(), v.version(), v.graphJson(), v.changelog(), v.createdAt());
+    }
+
+    /** 读取指定发布版本冻结的图，供历史执行回溯使用。 */
+    public String versionGraph(String flowId, int version) {
+        List<String> rows = jdbc.query("SELECT graph_json FROM flow_version WHERE flow_id=? AND version=?",
+                (rs, i) -> rs.getString(1), flowId, version);
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     /** 已安装的节点包。 */

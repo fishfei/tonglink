@@ -29,6 +29,7 @@ public class CryptoService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String PREFIX = "v1:";
+
     private static final int IV_LENGTH = 12;
     private static final int TAG_BITS = 128;
 

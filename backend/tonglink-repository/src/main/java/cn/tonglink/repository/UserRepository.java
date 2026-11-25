@@ -57,6 +57,11 @@ public class UserRepository {
         jdbc.update("DELETE FROM sys_user");
     }
 
+    /** 删除指定账号；系统只保留 admin 时用于移除旧的内置演示角色。 */
+    public void deleteByUsername(String username) {
+        jdbc.update("DELETE FROM sys_user WHERE username = ?", username);
+    }
+
     /** 用户总数，用于判断是否需要写入内置账号。 */
     public long count() {
         Long n = jdbc.queryForObject("SELECT COUNT(*) FROM sys_user", Long.class);

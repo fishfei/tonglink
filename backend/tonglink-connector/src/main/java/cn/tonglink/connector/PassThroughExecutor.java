@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
  * <p>早期实现直接透传空列表，导致下游代码/逻辑节点永远拿不到数据——条件判断恒为 false、
  * 脚本的 {@code $input.map(...)} 恒为空数组，页面上看流程「跑成功了但什么都没发生」。
  * 现在触发器输出一行含触发类型、流程 ID 与时间戳的事件数据，
- * 与 n8n 的 trigger item 语义一致，下游节点可据此展开真实业务数据。</p>
+ * 下游节点可据此展开真实业务数据。</p>
  */
 @Component
 public class PassThroughExecutor implements NodeExecutor {

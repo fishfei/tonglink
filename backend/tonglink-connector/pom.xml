@@ -8,9 +8,18 @@
   <description>节点执行器：OT/IT 协议、逻辑与输出适配器</description>
   <dependencies>
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-datasource</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-node</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.lettuce</groupId><artifactId>lettuce-core</artifactId></dependency>
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-taskrunner</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>org.eclipse.paho</groupId><artifactId>org.eclipse.paho.client.mqttv3</artifactId><version>1.2.5</version></dependency>
+    <dependency><groupId>org.apache.kafka</groupId><artifactId>kafka-clients</artifactId></dependency>
+    <!-- 用户流程里的数据库节点使用独立连接池，避免每次执行都新建物理连接 -->
+    <dependency><groupId>com.zaxxer</groupId><artifactId>HikariCP</artifactId></dependency>
+    <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><scope>runtime</scope></dependency>
     <!-- 测试项目「深圳天气写入 MySQL」需要真实 JDBC 驱动；未填地址时执行器会降级为模拟写入 -->
     <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><version>9.2.0</version><scope>runtime</scope></dependency>
+    <!-- 告警通知节点的真实邮件发送（Jakarta Mail + Angus SMTP 实现） -->
+    <dependency><groupId>org.eclipse.angus</groupId><artifactId>angus-mail</artifactId><version>2.0.3</version></dependency>
+    <dependency><groupId>org.eclipse.angus</groupId><artifactId>smtp</artifactId><version>2.0.3</version></dependency>
   </dependencies>
 </project>

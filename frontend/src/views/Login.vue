@@ -12,9 +12,7 @@ const remember = ref(!!localStorage.getItem('tls_remember'))
 const loading = ref(false)
 
 const accounts = [
-  { label: '管理员', username: 'admin', password: 'Admin@123' },
-  { label: '工程师', username: 'engineer', password: 'Eng@123' },
-  { label: '只读用户', username: 'viewer', password: 'View@123' }
+  { label: '管理员', username: 'admin', password: 'Admin@123' }
 ]
 
 function fill(account: any) {

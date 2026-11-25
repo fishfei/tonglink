@@ -27,58 +27,55 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 数据源接口。
+ * 数据源接口：连接参数与认证凭据统一维护。
  *
- * <p>除标准 CRUD 外提供两组能力：连通性测试、JSON 导入导出。
- * 导出文件名按数据源名称生成，便于运维直接归档到资产库。</p>
+ * <p>除标准 CRUD 外提供凭据类型目录、连通性测试与 JSON 导入导出。
+ * 所有返回给前端的数据源都经过视图转换，密码字段只给掩码。</p>
  */
 @RestController
 @RequestMapping("/api/v1/datasources")
 public class DataSourceController {
 
     private final DataSourceService service;
-    private final ProtocolCatalog catalog;
 
-    public DataSourceController(DataSourceService service, ProtocolCatalog catalog) {
+    public DataSourceController(DataSourceService service) {
         this.service = service;
-        this.catalog = catalog;
     }
 
     /** 列表；{@code protocol} 为可选的模糊过滤条件。 */
     @GetMapping
-    public Result<List<DataSource>> list(@RequestParam(required = false) String protocol) {
+    public Result<List<Map<String, Object>>> list(@RequestParam(required = false) String protocol) {
         List<DataSource> all = service.list();
-        if (protocol == null || protocol.isBlank()) {
-            return Result.ok(all);
+        if (protocol != null && !protocol.isBlank()) {
+            String keyword = protocol.toLowerCase();
+            all = all.stream().filter(s -> s.protocol().toLowerCase().contains(keyword)).toList();
         }
-        String keyword = protocol.toLowerCase();
-        return Result.ok(all.stream()
-                .filter(s -> s.protocol().toLowerCase().contains(keyword))
-                .toList());
+        return Result.ok(all.stream().map(service::view).toList());
     }
 
-    /** 协议元数据：前端新建抽屉据此渲染字段。 */
-    @GetMapping("/protocols")
-    public Result<Map<String, List<String>>> protocols() {
-        return Result.ok(catalog.all());
+    /** 凭据类型目录：前端据此渲染不同数据源的认证表单。 */
+    @GetMapping("/credential-types")
+    public Result<List<Map<String, Object>>> credentialTypes() {
+        return Result.ok(service.credentialTypes());
     }
 
     /** 单条查询。 */
     @GetMapping("/{id}")
-    public Result<DataSource> get(@PathVariable String id) {
-        return Result.ok(service.get(id));
+    public Result<Map<String, Object>> get(@PathVariable String id) {
+        return Result.ok(service.view(service.get(id)));
     }
 
     /** 新建。 */
     @PostMapping
-    public Result<DataSource> create(@RequestBody Map<String, Object> body) {
-        return Result.ok(service.create(body));
+    public Result<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
+        return Result.ok(service.view(service.create(body)));
     }
 
     /** 更新。 */
     @PutMapping("/{id}")
-    public Result<DataSource> update(@PathVariable String id, @RequestBody Map<String, Object> body) {
-        return Result.ok(service.update(id, body));
+    public Result<Map<String, Object>> update(@PathVariable String id,
+                                              @RequestBody Map<String, Object> body) {
+        return Result.ok(service.view(service.update(id, body)));
     }
 
     /** 删除。 */
@@ -88,13 +85,19 @@ public class DataSourceController {
         return Result.ok();
     }
 
-    /** 测试连通性。 */
+    /** 测试已保存数据源的连通性。 */
     @PostMapping("/{id}/test")
     public Result<Map<String, Object>> test(@PathVariable String id) {
         return Result.ok(service.test(id));
     }
 
-    /** 导出全部数据源。 */
+    /** 保存前用表单里的字段直接测试连通性，不修改数据库。 */
+    @PostMapping("/test")
+    public Result<Map<String, Object>> testDraft(@RequestBody Map<String, Object> body) {
+        return Result.ok(service.testDraft(body));
+    }
+
+    /** 导出全部数据源；凭据密码仍以密文导出，导入后可继续使用。 */
     @GetMapping("/export")
     public ResponseEntity<byte[]> exportAll() {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -115,26 +118,22 @@ public class DataSourceController {
         return download(safeName(s.name()) + ".json", JsonUtil.stringify(payload));
     }
 
-    /**
-     * 导入：兼容「单个 item」与「批量 items」两种文件。
-     *
-     * <p>导入一律重新生成 ID，避免与现有数据冲突。</p>
-     */
+    /** 导入：兼容「单个 item」与「批量 items」两种文件，重新生成 ID。 */
     @PostMapping("/import")
-    public Result<List<DataSource>> importJson(@RequestBody Map<String, Object> payload) {
-        List<DataSource> created = new ArrayList<>();
+    public Result<List<Map<String, Object>>> importJson(@RequestBody Map<String, Object> payload) {
+        List<Map<String, Object>> created = new ArrayList<>();
         Object item = payload.get("item");
         if (item != null) {
             Map<String, Object> body = JsonUtil.toMap(item);
             body.remove("id");
-            created.add(service.create(body));
+            created.add(service.view(service.create(body)));
         }
         Object items = payload.get("items");
         if (items instanceof List<?> list) {
             for (Object each : list) {
                 Map<String, Object> body = JsonUtil.toMap(each);
                 body.remove("id");
-                created.add(service.create(body));
+                created.add(service.view(service.create(body)));
             }
         }
         if (created.isEmpty()) {

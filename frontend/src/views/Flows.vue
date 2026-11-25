@@ -217,7 +217,7 @@ function fitFlowView(attempt = 0) {
 /** 从节点定义里挑一句话作为节点摘要，让画布上的节点更有信息量。 */
 function nodeSummary(def: any, config: any): string {
   const c = config || {}
-  const ds = c.datasource || c.connection || c.credential || ''
+  const ds = c.datasource || ''
   if (ds) return `数据源：${ds}`
   if (c.code) return String(c.code).trim().split('\n')[0].slice(0, 24) || '脚本'
   if (c.topic) return `Topic：${c.topic}`
@@ -257,6 +257,34 @@ function makeEdge(id: string, source: string, target: string, sourceHandle = 'ou
     markerEnd: MarkerType.ArrowClosed,
     style: { stroke: '#94a3b8', strokeWidth: 1.8 }
   }
+}
+
+function isMergeNode(n: any) {
+  return n?.data?.type === 'logic' && n?.data?.subtype === 'merge'
+}
+
+/**
+ * 合并节点按上游连线数量显示输入端口（参考 n8n）：每条入边独占一个 handle，
+ * 增删连线后重新从左到右编号，画布上的箭头数量与上游节点数一致。
+ */
+function syncMergeInputs() {
+  const merges = nodes.value.filter(isMergeNode)
+  if (!merges.length) return
+  const incoming = new Map<string, any[]>()
+  edges.value.forEach((e: any) => {
+    if (!incoming.has(e.target)) incoming.set(e.target, [])
+    incoming.get(e.target)!.push(e)
+  })
+  const portIndex = (e: any) => {
+    const m = /^in-(\d+)$/.exec(String(e.targetHandle || ''))
+    return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER
+  }
+  merges.forEach((node: any) => {
+    const list = (incoming.get(node.id) || []).slice()
+      .sort((a, b) => portIndex(a) - portIndex(b))
+    list.forEach((edge: any, index: number) => { edge.targetHandle = `in-${index}` })
+    node.data.inputCount = list.length
+  })
 }
 
 /** 把节点时间线转成 nodeId → 状态，供画布与日志流程图复用。 */
@@ -319,6 +347,7 @@ async function selectFlow(flow: any) {
   nodes.value = (graph?.nodes || []).map(toVueNode)
   edges.value = (graph?.connections || []).map((e: any) =>
     makeEdge(e.id, e.source, e.target, e.sourceHandle || 'out', e.targetHandle || 'in'))
+  syncMergeInputs()
   // 切换流程后，上一次执行的成功勾/绿色箭头不再适用
   activeExecution.value = null
   execNodes.value = []
@@ -350,14 +379,6 @@ function graphPayload() {
       sourceHandle: e.sourceHandle || 'out', targetHandle: e.targetHandle || 'in'
     }))
   }
-}
-
-function guessType(subtype: string) {
-  if (subtype.startsWith('trigger') || subtype.includes('schedule') || subtype.includes('manual')) return 'trigger'
-  if (['opcua', 'modbus', 'mqtt', 'kafka', 'http', 'mysql', 'oracle', 'postgres', 'sqlserver', 'mongodb'].includes(subtype)) return 'source'
-  if (['nodejs', 'python'].includes(subtype)) return 'code'
-  if (['condition', 'filter', 'merge', 'delay'].includes(subtype)) return 'logic'
-  return 'output'
 }
 
 /** 保存画布草稿；silent=true 用于自动保存，不弹成功提示。 */
@@ -562,6 +583,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
   nodes.value = nodes.value.filter((n: any) => !selectedIds.has(n.id))
   edges.value = edges.value.filter((ed: any) =>
     !selectedEdgeIds.has(ed.id) && !selectedIds.has(ed.source) && !selectedIds.has(ed.target))
+  syncMergeInputs()
   markDirty()
   ElMessage.success(`已删除 ${selectedIds.size} 个节点、${selectedEdgeIds.size} 条连线`)
 }
@@ -884,10 +906,12 @@ function onNodeDragStop() {
 function onConnect(params: any) {
   // 自连与重复连线没有意义，直接忽略
   if (!params.source || !params.target || params.source === params.target) return
-  if (edges.value.some((e: any) => e.source === params.source && e.target === params.target)) return
+  if (edges.value.some((e: any) => e.source === params.source && e.target === params.target
+      && (e.sourceHandle || 'out') === (params.sourceHandle || 'out'))) return
   edges.value.push(makeEdge(
     'e-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
     params.source, params.target, params.sourceHandle || 'out', params.targetHandle || 'in'))
+  syncMergeInputs()
   markDirty()
 }
 
@@ -895,7 +919,10 @@ function onConnect(params: any) {
 function removeEdge(id: string) {
   const before = edges.value.length
   edges.value = edges.value.filter((e: any) => e.id !== id)
-  if (edges.value.length !== before) markDirty()
+  if (edges.value.length !== before) {
+    syncMergeInputs()
+    markDirty()
+  }
 }
 
 /** 在指定连线中间插入节点：source → 新节点 → target。 */
@@ -905,6 +932,7 @@ function insertNodeIntoEdge(edge: any, nodeId: string) {
     edge.sourceHandle || 'out', 'in'))
   edges.value.push(makeEdge('e-' + Date.now() + '-b' + Math.floor(Math.random() * 1000), nodeId, edge.target,
     'out', edge.targetHandle || 'in'))
+  syncMergeInputs()
   markDirty()
 }
 
@@ -938,6 +966,15 @@ function datasourceOptions(def: any) {
   return filterDatasources(store.sources, String(def?.subtype || ''))
 }
 
+/** 认证类字段不再按协议过滤：凭据统一存放在数据源里，可以是纯 CREDENTIAL 类别。 */
+const CREDENTIAL_FIELD_KEYS = ['credential', 'auth', 'username', 'password', 'token', 'secret']
+function optionsForField(def: any, f: any) {
+  return CREDENTIAL_FIELD_KEYS.includes(f.key)
+    ? [...store.sources].sort((a, b) =>
+        (a.category === 'CREDENTIAL' ? -1 : 1) - (b.category === 'CREDENTIAL' ? -1 : 1))
+    : datasourceOptions(def)
+}
+
 function currentDef() {
   const node = nodes.value.find(n => n.id === draftNodeId.value)
   if (!node) return undefined
@@ -965,6 +1002,7 @@ function saveNodeConfig() {
 function deleteNode() {
   nodes.value = nodes.value.filter(n => n.id !== draftNodeId.value)
   edges.value = edges.value.filter(e => e.source !== draftNodeId.value && e.target !== draftNodeId.value)
+  syncMergeInputs()
   drawer.value = false
   markDirty()
 }
@@ -1005,6 +1043,7 @@ function addNodeAt(def: any, position: { x: number; y: number }, autoPosition = 
     // 触发器是流程入口，不能被自动接到别的节点后面
     edges.value.push(makeEdge('e-' + Date.now() + '-' + Math.floor(Math.random() * 1000), previous.id, id))
   }
+  syncMergeInputs()
   markDirty()
   return node
 }
@@ -1072,9 +1111,9 @@ async function importFlow(event: any) {
   event.target.value = ''
 }
 
-async function openManager() {
-  market.value = await api.nodeMarket()
-  managerVisible.value = true
+function openManager() {
+  // 节点管理已独立成菜单页，统一跳转到该页安装/卸载节点包
+  location.hash = '#/nodes'
 }
 
 async function install(item: any) {
@@ -1138,7 +1177,6 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('pagehide', onPageHide)
   store.loadSources()
-  store.loadCredentials()
   store.loadNodeDefinitions().then(loadFlows)
   // 兜底自动保存：即使一直停留在同一画布，也定期把变更落盘
   autosaveTimer = window.setInterval(() => { autoSave() }, 15000)
@@ -1361,11 +1399,11 @@ onUnmounted(() => {
               <el-option v-for="o in f.options || []" :key="o" :label="f.labels?.[o] || o" :value="o" />
             </el-select>
             <el-select v-else-if="f.type === 'datasource'" v-model="draft[f.key]" style="width:100%" filterable>
-              <el-option v-for="s in datasourceOptions(currentDef())" :key="s.id"
-                         :label="`${s.name} · ${s.protocol}（${s.id}）`" :value="s.id" />
+              <el-option v-for="s in optionsForField(currentDef(), f)" :key="s.id"
+                         :label="s.name" :value="s.id" />
             </el-select>
             <el-select v-else-if="f.type === 'credential'" v-model="draft[f.key]" style="width:100%" filterable>
-              <el-option v-for="c in store.credentials" :key="c.id" :label="`${c.name}（${c.id}）`" :value="c.id" />
+              <el-option v-for="s in store.sources" :key="s.id" :label="s.name" :value="s.id" />
             </el-select>
             <el-input v-else-if="f.type === 'code'" v-model="draft[f.key]" type="textarea"
                       class="code-editor" :rows="f.rows || 12" spellcheck="false" />

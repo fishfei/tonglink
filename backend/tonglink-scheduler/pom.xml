@@ -10,5 +10,8 @@
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-workflow</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-queue</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-execution</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-datasource</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>org.apache.kafka</groupId><artifactId>kafka-clients</artifactId></dependency>
+    <dependency><groupId>org.eclipse.paho</groupId><artifactId>org.eclipse.paho.client.mqttv3</artifactId><version>1.2.5</version></dependency>
   </dependencies>
 </project>

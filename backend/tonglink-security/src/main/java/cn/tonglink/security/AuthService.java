@@ -37,8 +37,7 @@ public class AuthService {
     /**
      * 校验账号密码并签发令牌。
      *
-     * <p>口令比对以 BCrypt 为准；另外兼容文档早期给出的演示口令（README / TEST_REPORT 里写过的
-     * {@code Admin@123} 等），避免用户按文档操作却登录失败。正式部署应删除这组兼容口令。</p>
+     * <p>口令仅以数据库中的 BCrypt 哈希为准，不做任何演示口令兼容。</p>
      *
      * @return 含 token / username / role / displayName 的登录结果
      * @throws ApiException 账号不存在、被禁用或密码错误时返回 401
@@ -56,21 +55,9 @@ public class AuthService {
         return result;
     }
 
-    /** 早期文档中的演示口令，仅用于兼容，不写入数据库。 */
-    private static final Map<String, String> LEGACY_PASSWORDS = Map.of(
-            "admin", "Admin@123",
-            "engineer", "Eng@123",
-            "viewer", "View@123");
-
-    /**
-     * 口令比对：先 BCrypt，再退化到文档兼容口令。
-     */
+    /** 口令比对：只认数据库中保存的 BCrypt 哈希。 */
     private boolean passwordMatches(UserAccount user, String password) {
-        String raw = password == null ? "" : password;
-        if (encoder.matches(raw, user.passwordHash())) {
-            return true;
-        }
-        return raw.equals(LEGACY_PASSWORDS.get(user.username()));
+        return encoder.matches(password == null ? "" : password, user.passwordHash());
     }
 
     /**

@@ -14,6 +14,13 @@ defineProps<{ name: string }>()
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3.2 2" />
     </template>
+    <!-- 延时等待：沙漏 -->
+    <template v-else-if="name === 'hourglass'">
+      <path d="M5 22h14M5 2h14" />
+      <path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2" />
+      <path d="M7 22v-4.2a2 2 0 0 1 .6-1.4L12 12 7.6 7.6A2 2 0 0 1 7 6.2V2" />
+      <path d="m9.5 18 2.5-2.5L14.5 18" />
+    </template>
     <!-- 触发：手动（手指点击） -->
     <template v-else-if="name === 'hand'">
       <path d="M9 12V6.2a1.6 1.6 0 0 1 3.2 0V11" />

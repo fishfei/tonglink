@@ -86,7 +86,7 @@ docker compose -f docker/docker-compose.lite.yml up -d
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
 | `TONGLINK_DB_PATH` | `./data/tonglink.db` | SQLite 数据库路径 |
-| `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 凭据 AES-GCM 主密钥，生产必须修改 |
+| `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 数据源密码字段 AES-GCM 主密钥，生产必须修改 |
 | `TONGLINK_JWT_SECRET` | 开发用默认值 | JWT 签名密钥，生产必须修改 |
 | `TONGLINK_QUEUE_TYPE` | `inmemory` | 切换 `redis` 进入队列模式 |
 | `TONGLINK_AI_PROVIDER` | `local` | 切换 `openai` 并配置 endpoint/key |

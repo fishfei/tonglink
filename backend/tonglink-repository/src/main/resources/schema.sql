@@ -1,6 +1,8 @@
--- TongLink Studio 初始化表结构
--- 本文件同时兼容 SQLite（轻量模式）与 PostgreSQL（标准/队列模式）：
+-- TongLink Studio 表结构（唯一权威版本）
+-- 适用于 SQLite（轻量模式）与 PostgreSQL（标准/队列模式）：
 -- 使用通用类型 TEXT / VARCHAR / INTEGER / BIGINT，时间统一保存为 ISO-8601 字符串。
+-- 不提供旧库升级迁移：结构变更请按本脚本重建数据库。
+-- 认证信息只存 datasource.credential_type / datasource.credential_json，不存在独立 credential 表。
 
 CREATE TABLE IF NOT EXISTS sys_user (
   id VARCHAR(64) PRIMARY KEY,
@@ -28,20 +30,10 @@ CREATE TABLE IF NOT EXISTS datasource (
   category VARCHAR(16),
   protocol VARCHAR(64) NOT NULL,
   config_json TEXT,
+  credential_type VARCHAR(64),
+  credential_json TEXT,
   status VARCHAR(32),
   last_test TEXT,
-  created_at TEXT,
-  updated_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS credential (
-  id VARCHAR(64) PRIMARY KEY,
-  name VARCHAR(200) NOT NULL,
-  type VARCHAR(64),
-  scope VARCHAR(64),
-  value_cipher TEXT,
-  mask TEXT,
-  description TEXT,
   created_at TEXT,
   updated_at TEXT
 );
@@ -107,6 +99,30 @@ CREATE TABLE IF NOT EXISTS execution (
   tags TEXT
 );
 
+-- 每次执行实际使用的流程图快照：手动运行=草稿图，定时/外部触发=发布图。
+-- 独立于 execution 表，老库启动即可建表，无需迁移历史列。
+CREATE TABLE IF NOT EXISTS execution_graph (
+  execution_id VARCHAR(64) PRIMARY KEY,
+  graph_json TEXT
+);
+
+-- 延时等待断点：执行到 delay 节点时把进度快照落库，释放队列线程，到期后恢复
+CREATE TABLE IF NOT EXISTS execution_wait (
+  id VARCHAR(64) PRIMARY KEY,
+  execution_id VARCHAR(64) NOT NULL,
+  wait_until TEXT NOT NULL,
+  resume_index INTEGER NOT NULL,
+  node_id VARCHAR(64),
+  snapshot_json TEXT,
+  created_at TEXT
+);
+
+-- 外部触发器（Kafka / MQTT）投递的原始消息，供触发器节点向下游输出
+CREATE TABLE IF NOT EXISTS execution_input (
+  execution_id VARCHAR(64) PRIMARY KEY,
+  payload_json TEXT
+);
+
 CREATE TABLE IF NOT EXISTS execution_node (
   id VARCHAR(64) PRIMARY KEY,
   execution_id VARCHAR(64) NOT NULL,
@@ -168,6 +184,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_flow_project ON flow_definition(project_id);
 CREATE INDEX IF NOT EXISTS idx_exec_flow ON execution(flow_id);
 CREATE INDEX IF NOT EXISTS idx_exec_time ON execution(start_time);
+CREATE INDEX IF NOT EXISTS idx_wait_due ON execution_wait(wait_until);
+CREATE INDEX IF NOT EXISTS idx_wait_exec ON execution_wait(execution_id);
 CREATE INDEX IF NOT EXISTS idx_execnode_exec ON execution_node(execution_id);
 CREATE INDEX IF NOT EXISTS idx_log_exec_seq ON execution_log(execution_id, seq);
 CREATE INDEX IF NOT EXISTS idx_metric_time ON metric_point(ts);
