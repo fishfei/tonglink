@@ -112,8 +112,7 @@ tonglink/
 ├── prototype/         # 零依赖交互原型（直接打开 HTML）
 ├── docs/              # 架构、部署、开发与截图
 ├── docker/            # Dockerfile 与 compose
-├── scripts/           # 构建与部署脚本
-└── TEST_REPORT.md     # 自动化测试报告
+└── scripts/           # 构建与部署脚本
 ```
 
 ## 文档
@@ -122,7 +121,6 @@ tonglink/
 - [架构设计](docs/ARCHITECTURE.md) — 前后端架构、执行引擎、节点插件、安全设计
 - [部署指南](docs/DEPLOYMENT.md) — 单容器轻量 / 标准 / 队列模式
 - [开发指南](docs/DEVELOPMENT.md) — IDEA / VS Code 导入、本地运行、测试
-- [测试报告](TEST_REPORT.md) — 自动化测试与回归记录
 
 ## 测试
 

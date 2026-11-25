@@ -20,3 +20,6 @@ Thumbs.db
 
 # 内部工作记录（不发布）
 .workbuddy/
+
+# 本地测试记录（仅保留在本地，不入库）
+TEST_REPORT.md
