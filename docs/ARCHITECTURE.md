@@ -1,8 +1,8 @@
-# TongLink Studio 架构设计（v0.2 · 决策确认版）
+# TongLink Studio 架构设计（v0.2）
 
 > 本文是把交互原型落地为开源工程的设计基线。原型里已确定的契约（项目 → 流程两级、DAG 画布、Schema 驱动属性面板、类型驱动的数据源表单、节点可安装）在本文中被保留并升级为前后端共享的正式契约。
 >
-> 本版已按用户确认的 9 项决策修订，并参考业界常见做法重新设计了代码节点运行与容器部署形态。项目介绍见 [`INTRODUCTION.md`](INTRODUCTION.md)，部署操作见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
+> 本版依据 9 项关键决策修订，并参考业界常见做法重新设计了代码节点运行与容器部署形态。项目介绍见 [`INTRODUCTION.md`](INTRODUCTION.md)，部署操作见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
 
 ---
 
@@ -66,14 +66,14 @@
 
 | 层次 | 选型 | 版本基线 | 许可证 | 理由 |
 |---|---|---|---|---|
-| 前端框架 | Vue 3 + TypeScript | 3.5+ | MIT | 用户指定；组合式 API 适合复杂画布 |
+| 前端框架 | Vue 3 + TypeScript | 3.5+ | MIT | 组合式 API 适合复杂画布，生态成熟 |
 | 构建 | Vite 6 + npm | Vite 6.x / npm 10+ | MIT | 启动快、构建产物可直接由 Spring Boot 托管；仓库用 `package-lock.json` 锁定版本 |
 | DAG 画布 | **`@vue-flow/core` 及配套包** | **1.48.x** | MIT | 成熟的 DAG 画布库（`@vue-flow/core` / `background` / `controls` / `minimap` / `node-resizer`）；上游仓库已归档但版本稳定，锁定版本使用，后续可平滑迁移到 `@xyflow/vue` |
 | 代码编辑 | 原生 textarea（ElInput） | - | MIT（Element Plus） | Node.js / Python 代码以纯文本编辑为主，零额外编辑器依赖 |
 | UI 组件 | Element Plus | 2.x | MIT | 表单/抽屉/表格齐全，Schema 表单好映射 |
 | 图表 | ECharts | 5.x | Apache-2.0 | 看板趋势/柱状/异常标记 |
 | 状态 | Pinia + Vue Router | 最新 | MIT | 类型友好的状态与路由守卫 |
-| 后端 | **Spring Boot 3.5.x + Java 21 LTS** | 3.5 / 21 | Apache-2.0 | 用户选定 3.x 最新稳定文档版；Java 21 兼容性与生态最稳 |
+| 后端 | **Spring Boot 3.5.x + Java 21 LTS** | 3.5 / 21 | Apache-2.0 | 3.x 最新稳定文档版；Java 21 兼容性与生态最稳 |
 | 持久层 | Spring Boot JDBC（JdbcTemplate）+ HikariCP | Spring Boot 3.5 内置 | Apache-2.0 | 手写通用 SQL 屏蔽 SQLite / PostgreSQL 方言差异，无 ORM、无迁移工具 |
 | 主库 | SQLite（默认）/ PostgreSQL 16（标准） | 3.49 / 16 | 公有领域 / PostgreSQL | 同一 jar 含双驱动，按 `DB_URL` 前缀切换；`schema.sql` 建表，流程 JSON 以 TEXT 存储 |
 | 队列 | 进程内队列（默认）/ Redis Streams（队列模式） | Lettuce 6.5 / Redis 7+ | BSD / 视版本 | 默认零依赖，队列模式用消费组 + `XAUTOCLAIM` 接管超时消息 |
@@ -83,10 +83,6 @@
 | 可观测 | Spring Boot Actuator（health/info/metrics） | Spring Boot 3.5 内置 | Apache-2.0 | 提供健康检查与基础指标；OTel 链路追踪、Prometheus/Grafana 属可选增强 |
 | 文档 | springdoc-openapi | 2.x | Apache-2.0 | 自动生成 API 文档 |
 | 测试 | Vitest / JUnit 5 + 环境变量门控真机测试 | - | MIT / Apache-2.0 | 前端单测 + 后端集成测试；Kafka/MQTT/PG/Redis/Modbus/OPC UA 用真机联调，不用 Testcontainers |
-
-> **Spring Boot 版本说明**：3.5.x 是 3.x 最后一个功能线，其开源支持已于 2026-06 结束，但仍是最稳定、文档最完整的 3.x 版本。按用户决定采用 3.5.x；代码保持与 4.x 的兼容性（不使用 3.x 专有 API），后续可低风险升级。
-
-> **依赖合规**：本项目 MIT；上述依赖均为宽松许可或 Apache-2.0。工业协议栈 Eclipse Milo（OPC UA）与 j2mod（Modbus）为 Apache-2.0，Eclipse Paho（MQTT）为 EPL/Apache 双许可。CI 中加入依赖许可证扫描与 NOTICE 生成。
 
 ---
 
@@ -560,7 +556,7 @@ sequenceDiagram
 
 ```
 tonglink-studio/
-├─ .github/workflows/ci.yml           # lint / test / build / 许可证扫描 / CodeQL
+├─ .github/workflows/ci.yml           # 后端 mvn test / 前端 npm test + build
 ├─ LICENSE (MIT) · NOTICE · CONTRIBUTING.md · CODE_OF_CONDUCT.md · SECURITY.md
 ├─ README.md
 ├─ docs/
@@ -597,13 +593,13 @@ tonglink-studio/
 
 - 前端：Vitest 单测流图序列化（`frontend/src/utils/graph.test.ts`）；未引入 Playwright，主链路以手动联调 + 高清截图存档验证。
 - 后端：JUnit 5（spring-boot-starter-test）测数据库、队列、执行引擎；Kafka/MQTT/PostgreSQL/Redis/Modbus/OPC UA 等真机测试由 `TONGLINK_*` 环境变量门控，未使用 Testcontainers。
-- CI：前端 `npm test && npm run build`；后端 `mvn test`；依赖许可证与漏洞扫描。
+- CI：前端 `npm test && npm run build`；后端 `mvn test`。
 
 ---
 
 ## 14. 首版实施范围（全功能交付）
 
-用户要求首版完成所有功能，因此下表**全部属于首个发布版本**；阶段只表示开发顺序，不代表功能裁剪。
+下表**全部属于首个发布版本**；阶段只表示开发顺序，不代表功能裁剪。
 
 | 顺序 | 工作项 | 交付内容 | 验收标准 |
 |---|---|---|---|
