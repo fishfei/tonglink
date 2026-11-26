@@ -48,7 +48,7 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 | 类别 | 节点 |
 |---|---|
 | 触发器 | 手动触发、定时触发、事件订阅（MQTT / Kafka） |
-| 数据源 | MQTT、HTTP、Kafka、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB |
+| 数据源 | MQTT、HTTP、Kafka、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB、OPC UA 读写、Modbus 读写 |
 | 代码与逻辑 | Node 代码、Python 代码、条件分支、数据合并、延时等待 |
 | 输出 | 写入时序库、HTTP 推送、告警通知、飞书多维表格 |
 
@@ -101,7 +101,7 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 - 存储：PostgreSQL 16 + TimescaleDB（标准 / 队列模式），SQLite（轻量单容器模式）。
 - 队列：默认进程内队列；队列模式切 Redis Stream。
 - 代码运行：Task Runner 双模式，默认子进程、可选独立容器。
-- 协议：Apache PLC4X（OPC UA / Modbus / S7）、Eclipse Paho（MQTT）。
+- 协议：OPC UA 采用 Eclipse Milo `sdk-client`（真实读写），Modbus TCP 采用 j2mod（寄存器 / 线圈读写），MQTT 采用 Eclipse Paho；S7comm 暂未开放。
 - AI：Spring AI，支持 OpenAI 兼容接口与本地 Ollama。
 
 ## 5. 设计参考与开源边界

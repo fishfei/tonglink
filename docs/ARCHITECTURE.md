@@ -142,7 +142,7 @@ flowchart TB
 
 > **Spring Boot 版本说明**：3.5.x 是 3.x 最后一个功能线，其开源支持已于 2026-06 结束，但仍是最稳定、文档最完整的 3.x 版本。按用户决定采用 3.5.x；代码保持与 4.x 的兼容性（不使用 3.x 专有 API），后续可低风险升级。
 
-> **依赖合规**：本项目 MIT；上述依赖均为宽松许可或 Apache-2.0。Apache PLC4X 为 Apache-2.0，Eclipse Paho 为 EPL/Apache 双许可。CI 中加入依赖许可证扫描与 NOTICE 生成。
+> **依赖合规**：本项目 MIT；上述依赖均为宽松许可或 Apache-2.0。工业协议栈 Eclipse Milo（OPC UA）与 j2mod（Modbus）为 Apache-2.0，Eclipse Paho（MQTT）为 EPL/Apache 双许可。CI 中加入依赖许可证扫描与 NOTICE 生成。
 
 ---
 
@@ -393,7 +393,7 @@ backend/
 | `minutes` | interval | Quartz SimpleTrigger，毫秒 = interval × 60 × 1000 |
 | `cron` | expression | Quartz CronTrigger（6 位：秒 分 时 日 月 周） |
 
-另有 `manual`（不注册调度）和 `event`（MQTT/OPC UA 订阅）。
+另有 `manual`（不注册调度）。MQTT / Kafka 由外部消息触发器长期订阅并把消息转成一次执行（见 `ExternalTriggerService`）；OPC UA / Modbus 当前以节点轮询读写为主，暂不提供订阅触发器。
 
 ---
 
@@ -566,7 +566,7 @@ sequenceDiagram
 - `DatasourceGateway` 按 `datasourceId + protocol` 缓存连接，空闲回收，断线自动重连（指数退避）。
 - 每个数据源限制并发连接与 QPS，防止打爆 PLC。
 - OT 读取保留质量戳（GOOD/BAD/UNCERTAIN），质量戳过滤在节点配置中声明。
-- 订阅型数据源（MQTT / OPC UA Subscription）由长驻 `event` 流程承载，数据先写 `metric_point` 再触发下游；断网续传采用本地缓冲 + 恢复重放。
+- 订阅型数据源目前指 MQTT / Kafka：由长驻触发器订阅主题并把每条消息转成一次流程执行，消息体作为触发器节点输出传给下游；断网重连由客户端自动退避。OPC UA / Modbus 当前以轮询读写为主，订阅型触发器（MonitoredItem / Pub/Sub）暂未开放。
 
 ### 9.3 延时节点的数据语义
 

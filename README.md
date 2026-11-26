@@ -19,7 +19,7 @@
 |:---:|:---:|
 | ![数据看板](docs/screenshots/02-dashboard.png) | ![流程编排](docs/screenshots/04-flow-editor.png) |
 
-| 执行日志与节点诊断 | 数据源（类型化连接与认证） |
+| 执行日志与节点诊断 | 数据源（含已连接的 OPC UA / Modbus TCP） |
 |:---:|:---:|
 | ![执行日志](docs/screenshots/06-executions.png) | ![数据源管理](docs/screenshots/03-sources.png) |
 
@@ -30,7 +30,7 @@
 ## 功能特性
 
 - **可视化流程编排**：基于 `@vue-flow/core` 的 DAG 画布，支持节点拖拽、框选多选、连线、平移缩放；定时 / 手动触发。
-- **丰富的节点**：定时 / Kafka / MQTT 触发器，HTTP 请求、Node / Python 代码、条件分支 / 过滤 / 合并 / 异步延时，Kafka / MQTT / 飞书多维表格 / 数据库 / 告警输出等。
+- **丰富的节点**：定时 / Kafka / MQTT 触发器，HTTP 请求、Node / Python 代码、条件分支 / 过滤 / 合并 / 异步延时，**OPC UA / Modbus TCP 真实读写**（寄存器、线圈、nodeId，地址自动换算），Kafka / MQTT / 飞书多维表格 / 数据库 / 告警输出等。
 - **发布与版本管理**：草稿与已发布图隔离，发布生成不可变版本快照，支持版本时间线与一键回滚；未发布流程禁止下线。
 - **执行与可观测性**：DAG 拓扑执行，节点级输入 / 输出与耗时记录，服务端分页的执行日志、漏斗过滤（流程 / 状态 / 时间）与 AI 失败诊断，WebSocket 实时状态推送。
 - **数据源与变量**：一个数据源由一种连接类型定义，连接地址与认证信息在同一张表单里填写（MQTT / Kafka / 数据库 / 飞书 / 金蝶 / HTTP / OAuth 2.0 / Webhook 等），类别与协议由类型自动推导；密码字段 AES-GCM 加密且只回显掩码。变量按项目作用域隔离，可在流程中通过 `$vars` 引用。
