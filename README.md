@@ -4,7 +4,7 @@
 
 **通通都能连接 —— 开源 IT/OT 数据采集与编排平台**
 
-一个面向工业现场的数据流编排工具：用可视化 DAG 连接 MQTT、Kafka、HTTP、数据库与飞书多维表格，让数据从设备到业务系统顺畅流动。OPC UA / Modbus 暂未开放，后续版本再启用。
+一个面向工业现场的数据流编排工具：用可视化 DAG 连接 MQTT、Kafka、HTTP、数据库、OPC UA、Modbus TCP 与飞书多维表格，让数据从设备到业务系统顺畅流动。OPC UA / Modbus 节点支持真实读写，并附带 4 条工业场景测试流程。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)

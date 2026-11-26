@@ -24,7 +24,16 @@ public class CredentialTypeRegistry {
     private final Map<String, Map<String, Object>> types = new LinkedHashMap<>();
 
     public CredentialTypeRegistry() {
-        // OPC UA / Modbus 暂不从数据源管理暴露；节点定义也同步隐藏，后续需要再恢复。
+        // OT 工业协议：数据源管理直接暴露，节点定义与执行器同步启用
+        add("modbus", "Modbus TCP 连接", "OT", "Modbus TCP",
+                field("host", "主机地址", "text", true, "192.168.3.188"),
+                field("port", "端口", "text", false, "502"),
+                field("unitId", "从站号 (Unit ID)", "text", false, "1"));
+        add("opcua", "OPC UA 连接", "OT", "OPC UA",
+                field("endpoint", "服务端地址", "text", true, "opc.tcp://192.168.3.188:4840/wb/opcua/"),
+                field("namespace", "命名空间索引", "text", false, "2"),
+                field("username", "用户名（可选）", "text", false, "匿名访问请留空"),
+                field("password", "密码（可选）", "password", false, "匿名访问请留空"));
         add("oauth2", "OAuth 2.0", "IT", "HTTP/REST",
                 select("grantType", "授权模式", true,
                         "client_credentials", "password", "authorization_code"),

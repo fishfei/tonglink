@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>飞书等第三方节点需要凭据才能真实运行；告警节点已由 {@link AlertExecutor} 实现真实投递。
  * 轻量模式下由本执行器生成结构真实、取值合理的模拟数据，使「编排 → 运行 → 看板」
- * 整条链路可以在没有现场环境的机器上演示。OPC UA / Modbus 节点已暂时从节点面板与数据源
- * 类型目录移除，这里保留执行能力仅为兼容历史流程继续运行。</p>
+ * 整条链路可以在没有现场环境的机器上演示。OPC UA / Modbus 节点现由 {@link OpcuaExecutor}
+ * 与 {@link ModbusExecutor} 真实执行，不再经过本模拟执行器。</p>
  */
 @Component
 public class SimulatedSourceExecutor implements NodeExecutor {
@@ -31,7 +31,7 @@ public class SimulatedSourceExecutor implements NodeExecutor {
 
     @Override
     public Set<String> supports() {
-        return Set.of("source:opcua", "source:modbus", "source:mongodb",
+        return Set.of("source:mongodb",
                 "output:wecom", "output:redis", "output:influxdb", "output:elasticsearch");
     }
 

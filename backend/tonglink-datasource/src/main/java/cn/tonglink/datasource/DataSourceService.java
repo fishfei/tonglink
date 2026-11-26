@@ -35,12 +35,15 @@ public class DataSourceService {
     private final MetaRepository repo;
     private final CryptoService crypto;
     private final CredentialTypeRegistry credentialTypes;
+    private final IndustrialGateway industrialGateway;
 
     public DataSourceService(MetaRepository repo, CryptoService crypto,
-                             CredentialTypeRegistry credentialTypes) {
+                             CredentialTypeRegistry credentialTypes,
+                             IndustrialGateway industrialGateway) {
         this.repo = repo;
         this.crypto = crypto;
         this.credentialTypes = credentialTypes;
+        this.industrialGateway = industrialGateway;
     }
 
     /** 全部数据源。 */
@@ -282,6 +285,15 @@ public class DataSourceService {
                 }
             }
             String p = nullToEmpty(protocol).toLowerCase();
+            // 工业协议走真实网关握手，不再停留在「仅校验配置」
+            if ("modbus".equals(credentialType) || p.contains("modbus")) {
+                industrialGateway.testModbus(fields);
+                return new ProbeResult(true, "Modbus TCP 从站连接成功，寄存器读取正常");
+            }
+            if ("opcua".equals(credentialType) || p.contains("opc ua") || p.contains("opcua")) {
+                industrialGateway.testOpcua(fields);
+                return new ProbeResult(true, "OPC UA 会话建立成功，服务端节点读取正常");
+            }
             if (p.contains("http")) {
                 String url = str(fields.get("baseUrl"), str(fields.get("url"), ""));
                 boolean ok = testHttp(url);

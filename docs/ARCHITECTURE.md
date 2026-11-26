@@ -547,16 +547,19 @@ sequenceDiagram
 
 | 协议 | 实现 | 许可证 | 模式 | 说明 |
 |---|---|---|---|---|
-| OPC UA | Apache PLC4X Java 驱动 | Apache-2.0 | 轮询 + 订阅 | 支持六种安全策略、浏览、分包 |
-| Modbus TCP/RTU | Apache PLC4X `modbus-tcp` / `modbus-rtu` | Apache-2.0 | 轮询 | 寄存器类型与字节序可配 |
-| Siemens S7 | Apache PLC4X `s7` | Apache-2.0 | 轮询 | DB 块读取 |
+| OPC UA | Eclipse Milo `sdk-client` 0.6.x | Apache-2.0 | 轮询读写 | 匿名/用户名认证，nodeId 读写，写入类型跟随点位 |
+| Modbus TCP | j2mod 3.2.1 | Apache-2.0 | 轮询读写 | 保持/输入寄存器、线圈、离散输入；单/多站号 |
 | MQTT | Eclipse Paho | EPL/Apache 双许可 | 订阅 | 通配符主题、QoS |
 | HTTP/REST | Spring `RestClient` | Apache-2.0 | 请求 | 支持凭据引用 |
 | JDBC | MySQL / Oracle / PostgreSQL / SQL Server 驱动 | 各厂商 | 查询/CRUD | 支持 select/insert/update/delete/execute |
 | Kafka | spring-kafka | Apache-2.0 | 消费 | 消费组与位点策略 |
 | 飞书多维表格 | 飞书开放 API（自建应用凭据） | - | 写入/查询 | 新增/更新/查询/删除记录 |
 
-> PLC4X 用统一 API 覆盖 OPC UA / Modbus / S7，比混用多套驱动少一层适配；其许可证 Apache-2.0 与本项目 MIT 兼容。
+> OPC UA / Modbus 由 `tonglink-datasource` 的统一工业网关（`IndustrialGateway`）封装，数据源连通测试与节点执行器共用同一套连接缓存，避免重复握手。S7comm 暂未开放。
+
+### 9.1.1 工业协议网关
+
+`IndustrialGateway` 按端点缓存 Modbus 主站（`host:port`）与 OPC UA 会话（`endpoint`），对外提供 `testModbus` / `testOpcua`（连通测试）与 `readModbus` / `writeModbus` / `readOpcua` / `writeOpcua`（读写）。节点 config 只描述读写意图，连接参数统一来自数据源管理并自动解密凭据。Modbus 起始地址支持 0 基与 40001/30001/00001/10001 传统写法自动换算；OPC UA nodeId 支持 `ns=2;i=1001` 或纯数字（按数据源命名空间）。读写失败直接抛异常让节点标记 FAILED，不做模拟降级。
 
 ### 9.2 连接管理
 

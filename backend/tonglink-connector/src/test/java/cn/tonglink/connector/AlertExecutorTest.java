@@ -36,7 +36,7 @@ class AlertExecutorTest {
         private Map<String, Object> fields = Map.of();
 
         StubSources() {
-            super(null, null, null);
+            super(null, null, null, null);
         }
 
         void set(Map<String, Object> value) {

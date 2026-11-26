@@ -193,11 +193,12 @@ class IntegrationTest {
         MvcResult types = mvc.perform(get("/api/v1/datasources/credential-types")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(11)))
+                .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(13)))
                 .andReturn();
         String body = read(types).path("data").toString();
         assertTrue(body.contains("oauth2") && body.contains("http"));
-        assertTrue(!body.contains("opcua") && !body.contains("modbus"));
+        assertTrue(body.contains("opcua") && body.contains("modbus"),
+                "OPC UA / Modbus 数据源类型应对外暴露");
         assertTrue(body.contains("kingdee") && body.contains("feishu") && body.contains("database"));
 
         MvcResult feishu = mvc.perform(post("/api/v1/datasources")

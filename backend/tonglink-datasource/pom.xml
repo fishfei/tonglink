@@ -8,5 +8,8 @@
   <description>数据源管理、连通性测试与协议元数据</description>
   <dependencies>
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-security</artifactId><version>${project.version}</version></dependency>
+    <!-- 工业协议网关：数据源连通测试与节点执行器共用；connector 通过本模块传递依赖复用 -->
+    <dependency><groupId>com.ghgande</groupId><artifactId>j2mod</artifactId></dependency>
+    <dependency><groupId>org.eclipse.milo</groupId><artifactId>sdk-client</artifactId></dependency>
   </dependencies>
 </project>

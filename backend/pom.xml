@@ -48,6 +48,8 @@
     <sqlite.version>3.49.1.0</sqlite.version>
     <lettuce.version>6.5.0.RELEASE</lettuce.version>
     <kafka.version>3.9.1</kafka.version>
+    <j2mod.version>3.2.1</j2mod.version>
+    <milo.version>0.6.13</milo.version>
     <springdoc.version>2.8.9</springdoc.version>
     <jib.version>3.5.2</jib.version>
   </properties>
@@ -74,6 +76,13 @@
       </dependency>
       <dependency>
         <groupId>org.springdoc</groupId><artifactId>springdoc-openapi-starter-webmvc-ui</artifactId><version>${springdoc.version}</version>
+      </dependency>
+      <!-- 工业协议：Modbus TCP（j2mod）与 OPC UA（Eclipse Milo） -->
+      <dependency>
+        <groupId>com.ghgande</groupId><artifactId>j2mod</artifactId><version>${j2mod.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.milo</groupId><artifactId>sdk-client</artifactId><version>${milo.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

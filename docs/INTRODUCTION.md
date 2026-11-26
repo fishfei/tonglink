@@ -29,7 +29,8 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 ### 2.2 数据源管理
 
 - IT 数据源：HTTP/REST、OAuth 2.0、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB、Kafka、MQTT。
-- OT 数据源：OPC UA、Modbus TCP、S7comm 暂未开放，后续版本再启用。
+- OT 数据源：OPC UA、Modbus TCP 已开放真实读写——数据源抽屉可现场测试连通性（Modbus 读寄存器 / OPC UA 读服务端状态节点），节点执行器通过统一工业协议网关对设备读写；S7comm 暂未开放。
+- Modbus 节点支持保持寄存器 / 输入寄存器 / 线圈 / 离散输入的读取与保持寄存器 / 线圈写入，起始地址兼容 0 基与 40001/30001/00001/10001 传统写法；OPC UA 节点支持按 nodeId 读写，写入类型自动跟随点位现有类型。测试项目内置 4 条工业场景流程（Modbus/OPC UA 各读写一条）。
 - 新建 / 编辑表单字段随连接类型变化；数据库连接可填「主机 + 端口」（库名可选，MySQL/PostgreSQL 允许连接实例后再指定库）或直接粘贴完整 JDBC URL，抽屉里可保存前测试连接。Oracle/SQL Server 仍需填写服务名或库名。
 - 支持单条按名称导出与全部导出，支持 JSON 导入。
 

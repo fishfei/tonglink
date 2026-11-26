@@ -38,6 +38,20 @@
       "items": [
         {
           "type": "source",
+          "subtype": "opcua",
+          "title": "OPC UA 读写",
+          "icon": "cpu",
+          "color": "teal"
+        },
+        {
+          "type": "source",
+          "subtype": "modbus",
+          "title": "Modbus 读写",
+          "icon": "cpu",
+          "color": "teal"
+        },
+        {
+          "type": "source",
           "subtype": "http",
           "title": "HTTP 请求",
           "icon": "api",
@@ -434,6 +448,88 @@
           "label": "说明",
           "type": "text",
           "placeholder": "按需手动执行"
+        }
+      ]
+    },
+    "source:opcua": {
+      "title": "OPC UA 读写",
+      "note": "读写 OPC UA 服务端点位。节点 ID 支持 ns=2;i=1001 或纯数字（按数据源命名空间）；写入类型自动跟随点位现有类型。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择已配置的 OPC UA 连接"
+        },
+        {
+          "key": "operation",
+          "label": "操作",
+          "type": "select",
+          "options": ["读取", "写入"],
+          "default": "读取"
+        },
+        {
+          "key": "nodeId",
+          "label": "节点 ID（多个用逗号分隔）",
+          "type": "text",
+          "placeholder": "ns=2;i=1001",
+          "required": true
+        },
+        {
+          "key": "value",
+          "label": "写入值（多个用逗号分隔）",
+          "type": "text",
+          "placeholder": "88.5",
+          "required": false
+        }
+      ]
+    },
+    "source:modbus": {
+      "title": "Modbus 读写",
+      "note": "通过 Modbus TCP 读写从站。寄存器类型支持保持寄存器/输入寄存器/线圈/离散输入；起始地址支持 0 基地址与传统 40001/30001/00001/10001 写法，网关自动换算协议地址。",
+      "fields": [
+        {
+          "key": "datasource",
+          "label": "数据源",
+          "type": "datasource",
+          "required": true,
+          "hint": "从数据源管理中选择已配置的 Modbus TCP 连接"
+        },
+        {
+          "key": "operation",
+          "label": "操作",
+          "type": "select",
+          "options": ["读取", "写入"],
+          "default": "读取"
+        },
+        {
+          "key": "registerType",
+          "label": "寄存器类型",
+          "type": "select",
+          "options": ["保持寄存器", "输入寄存器", "线圈", "离散输入"],
+          "default": "保持寄存器"
+        },
+        {
+          "key": "startAddress",
+          "label": "起始地址",
+          "type": "text",
+          "placeholder": "0 或 40001",
+          "required": true
+        },
+        {
+          "key": "count",
+          "label": "读取数量",
+          "type": "number",
+          "placeholder": "1",
+          "default": "1"
+        },
+        {
+          "key": "value",
+          "label": "写入值（多个用逗号分隔）",
+          "type": "text",
+          "placeholder": "42",
+          "required": false
         }
       ]
     },

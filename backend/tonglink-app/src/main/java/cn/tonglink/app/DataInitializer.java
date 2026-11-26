@@ -74,6 +74,18 @@ public class DataInitializer implements CommandLineRunner {
     @Value("${tonglink.test.mysql.password:}")
     private String testMysqlPassword;
 
+    /** 内置测试用的工业协议模拟服务端，可用环境变量覆盖。 */
+    @Value("${tonglink.test.modbus.host:192.168.3.188}")
+    private String testModbusHost;
+    @Value("${tonglink.test.modbus.port:502}")
+    private String testModbusPort;
+    @Value("${tonglink.test.modbus.unit-id:1}")
+    private String testModbusUnitId;
+    @Value("${tonglink.test.opcua.endpoint:opc.tcp://192.168.3.188:4840/wb/opcua/}")
+    private String testOpcuaEndpoint;
+    @Value("${tonglink.test.opcua.namespace:2}")
+    private String testOpcuaNamespace;
+
     public DataInitializer(UserRepository users, MetaRepository meta, FlowRepository flows,
                            ExecutionRepository executions, PasswordEncoder encoder, CryptoService crypto,
                            CredentialTypeRegistry credentialTypes, javax.sql.DataSource dataSource) {
@@ -148,6 +160,13 @@ public class DataInitializer implements CommandLineRunner {
                 Map.of("host", "127.0.0.1", "port", "502", "unitId", "1"), Map.of(), now);
         ensureTypedSource("DS-TEST-OPCUA", "OPC UA（测试·模拟）", "opcua", "unconfigured",
                 Map.of("endpoint", "opc.tcp://127.0.0.1:4840", "namespace", "3"), Map.of(), now);
+        // 真实工业协议模拟服务端：供下方 4 条读写流程使用，地址可用环境变量覆盖
+        ensureTypedSource("DS-TEST-MODBUS-RT", "Modbus TCP 测试从站（真实）", "modbus", "connected",
+                Map.of("host", testModbusHost, "port", testModbusPort, "unitId", testModbusUnitId),
+                Map.of(), now);
+        ensureTypedSource("DS-TEST-OPCUA-RT", "OPC UA 测试服务端（真实）", "opcua", "connected",
+                Map.of("endpoint", testOpcuaEndpoint, "namespace", testOpcuaNamespace),
+                Map.of("username", "", "password", ""), now);
         ensureTypedSource("DS-TEST-FS-CRED", "飞书应用认证（测试·待配置）", "feishu", "unconfigured",
                 Map.of("appId", "请填写 appId", "appSecret", "请填写 appSecret"), Map.of(), now);
 
@@ -301,6 +320,68 @@ public class DataInitializer implements CommandLineRunner {
                 List.of(edge("oe1", "o1", "o2"), edge("oe2", "o2", "o3"), edge("oe3", "o3", "o4")));
         testFlow("FLOW-TEST-OPCUA", "OPC UA 点位订阅与异常检测（模拟）",
                 "Python 模拟 OPC UA 服务端 3 个点位 → 质量戳过滤与阈值检测 → 异常通知", opcua, now);
+
+        seedIndustrialFlows(now);
+    }
+
+    /**
+     * 4 条真实工业协议流程：分别写入 / 读取 Modbus 与 OPC UA 模拟服务端，形成写入→读取闭环，
+     * 用于验证节点执行器与数据源连通性确实作用于真实设备而非模拟数据。
+     */
+    private void seedIndustrialFlows(String now) {
+        FlowGraph modbusWrite = new FlowGraph(1, "FLOW-TEST-MODBUS-WRITE", "测试-Modbus-写入保持寄存器",
+                TEST_PROJECT, Map.of(),
+                List.of(
+                        node("t1", "trigger", "manual", "手动触发", Map.of(), 60, 200),
+                        node("m1", "source", "modbus", "写入 Modbus 保持寄存器",
+                                Map.of("datasource", "DS-TEST-MODBUS-RT", "operation", "写入",
+                                        "registerType", "保持寄存器", "startAddress", "0", "value", "20,30"), 360, 200)),
+                List.of(edge("e1", "t1", "m1")));
+        activeTestFlow("FLOW-TEST-MODBUS-WRITE", "测试-Modbus-写入保持寄存器",
+                "工业场景：写入保持寄存器地址 0=20、地址 1=30（模拟下发温度/压力设定值）", modbusWrite, now);
+
+        FlowGraph modbusRead = new FlowGraph(1, "FLOW-TEST-MODBUS-READ", "测试-Modbus-读取寄存器",
+                TEST_PROJECT, Map.of(),
+                List.of(
+                        node("t1", "trigger", "manual", "手动触发", Map.of(), 60, 200),
+                        node("m1", "source", "modbus", "读取 Modbus 保持寄存器",
+                                Map.of("datasource", "DS-TEST-MODBUS-RT", "operation", "读取",
+                                        "registerType", "保持寄存器", "startAddress", "0", "count", 6), 360, 200)),
+                List.of(edge("e1", "t1", "m1")));
+        activeTestFlow("FLOW-TEST-MODBUS-READ", "测试-Modbus-读取寄存器",
+                "工业场景：读取保持寄存器 0~5（采集温度/压力/转速），可验证写入流是否生效", modbusRead, now);
+
+        FlowGraph opcuaWrite = new FlowGraph(1, "FLOW-TEST-OPCUA-WRITE", "测试-OPCUA-写入点位",
+                TEST_PROJECT, Map.of(),
+                List.of(
+                        node("t1", "trigger", "manual", "手动触发", Map.of(), 60, 200),
+                        node("o1", "source", "opcua", "写入 OPC UA 温度点位",
+                                Map.of("datasource", "DS-TEST-OPCUA-RT", "operation", "写入",
+                                        "nodeId", "ns=2;i=1001", "value", "66.6"), 360, 200)),
+                List.of(edge("e1", "t1", "o1")));
+        activeTestFlow("FLOW-TEST-OPCUA-WRITE", "测试-OPCUA-写入点位",
+                "工业场景：写入 OPC UA 温度点位 ns=2;i=1001 = 66.6（模拟设定值下发）", opcuaWrite, now);
+
+        FlowGraph opcuaRead = new FlowGraph(1, "FLOW-TEST-OPCUA-READ", "测试-OPCUA-读取点位",
+                TEST_PROJECT, Map.of(),
+                List.of(
+                        node("t1", "trigger", "manual", "手动触发", Map.of(), 60, 200),
+                        node("o1", "source", "opcua", "读取 OPC UA 点位",
+                                Map.of("datasource", "DS-TEST-OPCUA-RT", "operation", "读取",
+                                        "nodeId", "ns=2;i=1001,ns=2;i=1002,ns=2;i=1003,ns=2;i=1004"), 360, 200)),
+                List.of(edge("e1", "t1", "o1")));
+        activeTestFlow("FLOW-TEST-OPCUA-READ", "测试-OPCUA-读取点位",
+                "工业场景：读取 OPC UA 温度/压力/转速/状态点位 ns=2;i=1001~1004", opcuaRead, now);
+    }
+
+    /** 工业测试流程以已发布（active）状态初始化，开箱即可手动运行；已存在的流程不覆盖。 */
+    private void activeTestFlow(String id, String name, String description, FlowGraph graph, String now) {
+        if (flows.flow(id) != null) {
+            return;
+        }
+        String json = JsonUtil.stringify(graph);
+        flows.saveFlow(new Flow(id, TEST_PROJECT, name, description, "active",
+                json, json, 1, "—", "—", 0L, "—", now, now));
     }
 
     /** 幂等写入内置测试数据；类型决定类别与协议，密码字段加密保存。 */
