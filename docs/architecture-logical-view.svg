@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="100%" font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowDash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="900" fill="#f8fafc"/>
+  <text x="600" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">TongLink Studio · 逻辑视图</text>
+
+  <!-- 浏览器 -->
+  <g>
+    <rect x="410" y="62" width="380" height="62" rx="10" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+    <text x="600" y="88" text-anchor="middle" font-size="16" font-weight="700" fill="#075985">浏览器 · Vue 3 SPA</text>
+    <text x="600" y="110" text-anchor="middle" font-size="13" fill="#0369a1">DAG 画布 / 看板 / 执行日志 / AI 助手</text>
+  </g>
+
+  <!-- 接入层 -->
+  <g>
+    <rect x="360" y="164" width="480" height="62" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <text x="600" y="190" text-anchor="middle" font-size="16" font-weight="700" fill="#1e40af">接入层 · Spring Boot Web</text>
+    <text x="600" y="212" text-anchor="middle" font-size="13" fill="#1d4ed8">REST API + WebSocket　·　首版前端静态资源由本服务托管</text>
+  </g>
+
+  <!-- 业务层 -->
+  <g>
+    <rect x="60" y="266" width="1080" height="152" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="80" y="290" font-size="14" font-weight="700" fill="#475569">业务层（模块化单体）</text>
+    <g font-size="13" fill="#0f172a">
+      <rect x="80" y="304" width="240" height="44" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="200" y="330" text-anchor="middle">认证鉴权 / RBAC</text>
+      <rect x="340" y="304" width="240" height="44" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="460" y="330" text-anchor="middle">项目 / 数据源 / 变量</text>
+      <rect x="600" y="304" width="240" height="44" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="720" y="330" text-anchor="middle">流程定义与版本</text>
+      <rect x="860" y="304" width="240" height="44" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="980" y="330" text-anchor="middle">节点注册中心</text>
+      <rect x="210" y="360" width="350" height="44" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="385" y="386" text-anchor="middle">调度器（@Scheduled + CronExpression）</text>
+      <rect x="580" y="360" width="250" height="44" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="705" y="386" text-anchor="middle">AI 服务（规则引擎 + 可选 LLM）</text>
+    </g>
+  </g>
+
+  <!-- 执行层 -->
+  <g>
+    <rect x="60" y="452" width="1080" height="120" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="80" y="476" font-size="14" font-weight="700" fill="#475569">执行层（按部署 profile 切换）</text>
+    <g font-size="13" fill="#0f172a">
+      <rect x="80" y="490" width="250" height="62" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <text x="205" y="515" text-anchor="middle" font-weight="700">执行引擎</text>
+      <text x="205" y="537" text-anchor="middle" font-size="12" fill="#047857">DAG 拓扑 / 重试 / 超时</text>
+
+      <rect x="360" y="490" width="350" height="62" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="2"/>
+      <text x="535" y="515" text-anchor="middle" font-weight="700">默认：进程内队列 + 本地执行</text>
+      <text x="535" y="537" text-anchor="middle" font-size="12" fill="#0f766e">单容器即可跑通全部功能</text>
+
+      <rect x="740" y="490" width="360" height="62" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+      <text x="920" y="515" text-anchor="middle" font-weight="700">队列模式：Redis Stream + 独立 Worker</text>
+      <text x="920" y="537" text-anchor="middle" font-size="12" fill="#c2410c">XREADGROUP / XACK / XAUTOCLAIM</text>
+    </g>
+  </g>
+
+  <!-- Task Runner -->
+  <g>
+    <rect x="300" y="602" width="600" height="62" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/>
+    <text x="600" y="628" text-anchor="middle" font-size="15" font-weight="700" fill="#6d28d9">代码节点 Task Runner（双模式）</text>
+    <text x="600" y="650" text-anchor="middle" font-size="12" fill="#7c3aed">内部模式：应用拉起的子进程（默认）　|　外部模式：独立 runners 容器（可选）</text>
+  </g>
+
+  <!-- 存储层 -->
+  <g>
+    <rect x="60" y="696" width="730" height="76" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="80" y="720" font-size="14" font-weight="700" fill="#475569">存储层</text>
+    <g font-size="13" fill="#0f172a">
+      <rect x="80" y="730" width="220" height="32" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="190" y="751" text-anchor="middle">SQLite（默认）/ PG 16</text>
+      <rect x="315" y="730" width="220" height="32" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="425" y="751" text-anchor="middle">Redis / Valkey（队列模式）</text>
+      <rect x="550" y="730" width="220" height="32" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+      <text x="660" y="751" text-anchor="middle">本地目录 / MinIO</text>
+    </g>
+  </g>
+
+  <!-- 外部系统 -->
+  <g>
+    <rect x="810" y="696" width="330" height="76" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="830" y="720" font-size="14" font-weight="700" fill="#475569">外部系统</text>
+    <g font-size="12" fill="#0f172a">
+      <rect x="826" y="730" width="150" height="32" rx="6" fill="#fef2f2" stroke="#dc2626"/>
+      <text x="901" y="751" text-anchor="middle">OPC UA / Modbus</text>
+      <rect x="982" y="730" width="142" height="32" rx="6" fill="#fef2f2" stroke="#dc2626"/>
+      <text x="1053" y="751" text-anchor="middle">MQTT / Kafka</text>
+    </g>
+  </g>
+
+  <!-- 主链路箭头 -->
+  <g stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M600,124 L600,162"/>
+    <path d="M600,226 L600,264"/>
+    <path d="M600,418 L600,450"/>
+    <path d="M205,552 L420,600"/>
+    <path d="M535,552 L535,600"/>
+    <path d="M600,664 L600,694"/>
+    <path d="M920,552 L975,694"/>
+  </g>
+  <!-- WebSocket 日志推送（虚线回流） -->
+  <g stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 5" fill="none" marker-end="url(#arrowDash)">
+    <path d="M360,500 C250,470 250,240 358,195"/>
+    <path d="M600,450 C740,430 770,280 600,228"/>
+  </g>
+  <text x="268" y="360" font-size="12" fill="#64748b" transform="rotate(-90,268,360)">WebSocket 日志推送</text>
+  <text x="712" y="340" font-size="12" fill="#64748b">定时触发</text>
+</svg>

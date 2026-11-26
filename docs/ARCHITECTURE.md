@@ -40,65 +40,9 @@
 
 ### 1.1 逻辑视图
 
-```mermaid
-flowchart TB
-    subgraph Browser["浏览器"]
-        UI["Vue 3 SPA<br/>DAG 画布 / 看板 / 日志 / AI"]
-    end
+![TongLink Studio 逻辑视图](architecture-logical-view.svg)
 
-    subgraph Access["接入层"]
-        API["Spring Boot Web<br/>REST + WebSocket<br/>首版前端静态资源由本服务托管"]
-    end
-
-    subgraph Business["业务层（模块化单体）"]
-        AUTH["认证鉴权 / RBAC"]
-        META["项目 / 数据源（类型化连接与认证）/ 变量"]
-        WF["流程定义与版本"]
-        REG["节点注册中心"]
-        SCH["调度器 Scheduler"]
-        EXEC["执行引擎"]
-        AI["AI 服务"]
-    end
-
-    subgraph ExecutionMode["执行模式（按部署 profile 切换）"]
-        LOCAL["默认：进程内队列 + 本地执行"]
-        QUEUE["队列模式：Redis Stream + 独立 Worker"]
-    end
-
-    subgraph Storage["存储层（按部署 profile 切换）"]
-        DB["SQLite（默认）/ PostgreSQL 16（标准）<br/>按 DB_URL 前缀切换"]
-        RD["Redis / Valkey<br/>仅队列模式需要"]
-        FILE["本地目录 / MinIO<br/>节点包与大对象"]
-    end
-
-    subgraph Runner["代码节点 Task Runner（双模式）"]
-        INT["内部模式：应用拉起的子进程<br/>默认，单容器即可用"]
-        EXT["外部模式：独立 runners 容器<br/>生产可选"]
-    end
-
-    subgraph External["外部系统"]
-        OT["OPC UA / Modbus / S7 / MQTT"]
-        IT["HTTP / JDBC / Kafka"]
-        BIZ["飞书 / 企业微信 / MES"]
-        LLM["可选 LLM（OpenAI 兼容接口）"]
-    end
-
-    UI --> API
-    API --> AUTH & META & WF & REG & SCH & EXEC & AI
-    API --> DB & FILE
-    SCH --> EXEC
-    EXEC --> LOCAL
-    LOCAL --> QUEUE
-    QUEUE --> RD
-    EXEC --> REG & DB & FILE
-    EXEC --> INT
-    INT --> EXT
-    EXEC --> OT & IT & BIZ
-    EXEC -.WebSocket 日志推送.-> API
-    API -.-> UI
-    META & WF & REG --> DB
-    AI --> LLM
-```
+> 矢量图，放大不失真。分层展示浏览器、接入层、业务层（模块化单体）、执行层、Task Runner、存储层及外部系统之间的关系；实线为调用链，虚线为 WebSocket 日志推送与定时触发。
 
 ### 1.2 部署视图（渐进容器数）
 

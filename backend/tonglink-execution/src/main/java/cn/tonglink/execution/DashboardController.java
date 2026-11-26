@@ -7,8 +7,10 @@ package cn.tonglink.execution;
 import cn.tonglink.common.Result;
 import cn.tonglink.model.entity.Execution;
 import cn.tonglink.model.entity.Flow;
+import cn.tonglink.model.entity.Project;
 import cn.tonglink.repository.ExecutionRepository;
 import cn.tonglink.repository.FlowRepository;
+import cn.tonglink.repository.MetaRepository;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -16,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -33,10 +36,12 @@ public class DashboardController {
 
     private final FlowRepository flows;
     private final ExecutionRepository executions;
+    private final MetaRepository meta;
 
-    public DashboardController(FlowRepository flows, ExecutionRepository executions) {
+    public DashboardController(FlowRepository flows, ExecutionRepository executions, MetaRepository meta) {
         this.flows = flows;
         this.executions = executions;
+        this.meta = meta;
     }
 
     /** KPI 汇总：流程总数、运行中数量、累计采集量、成功率、即将执行的流程。 */
@@ -118,14 +123,20 @@ public class DashboardController {
     /** 各流程采集量与成功率，用于看板表格与柱状图。 */
     @GetMapping("/flow-stats")
     public Result<List<Map<String, Object>>> flowStats() {
+        // 一次性查出项目名映射，避免在流程循环里逐条查库
+        Map<String, String> projectNames = meta.projects().stream()
+                .collect(Collectors.toMap(Project::id, Project::name, (a, b) -> a));
         List<Map<String, Object>> result = new ArrayList<>();
         for (Flow f : flows.flows()) {
             List<Execution> list = executions.executions(f.id(), null, 100);
             long ok = list.stream().filter(e -> "SUCCESS".equals(e.status())).count();
+            String projectId = f.projectId() == null ? "" : f.projectId();
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", f.id());
             row.put("name", f.name());
-            row.put("projectId", f.projectId() == null ? "" : f.projectId());
+            row.put("projectId", projectId);
+            // 关联项目名称；项目已删除时回退显示 ID，避免空单元格
+            row.put("projectName", projectNames.getOrDefault(projectId, projectId));
             row.put("records", f.records());
             row.put("status", f.status());
             // 前端据此区分「已下线」（曾发布但被停掉）与「从未发布的草稿」

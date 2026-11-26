@@ -29,6 +29,12 @@ function flowStatusText(row: any) {
   return Number(row.publishedVersion) > 0 ? '已下线' : '草稿'
 }
 
+/** 所属项目显示名称：优先用接口返回的项目名，兼容旧数据再从项目列表兜底查找。 */
+function projectName(row: any) {
+  if (row.projectName) return row.projectName
+  return store.projects.find((p: any) => p.id === row.projectId)?.name || row.projectId || '—'
+}
+
 async function load() {
   summary.value = await api.dashboardSummary()
   stats.value = await api.dashboardFlowStats()
@@ -120,7 +126,9 @@ onMounted(() => {
             <el-link type="primary" @click="router.push('/flows')">{{ row.name }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column prop="projectId" label="所属项目" width="120" />
+        <el-table-column label="所属项目" width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ projectName(row) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small" effect="plain">
