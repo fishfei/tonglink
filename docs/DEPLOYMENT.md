@@ -15,8 +15,8 @@
 | 形态 | 容器数 | 组成 | 适用 |
 |---|---|---|---|
 | 轻量 lite | **1** | `app`（前端静态资源 + API + SQLite + 进程内队列 + 内部 Runner 子进程） | 试用、开发、简单工作流 |
-| 标准 standard | **2** | `app` + `postgres`（TimescaleDB） | 团队长期使用，推荐起点 |
-| 队列 queue | **4+** | `app-web` + `app-worker` × N + `postgres` + `redis`；可选 `runners`、`nginx`、`ollama` | 高并发、水平扩展、强隔离 |
+| 标准 standard | **2** | `app` + `postgres:16-alpine` | 团队长期使用，推荐起点 |
+| 队列 queue | **4+** | `app-web` + `app-worker` × N + `postgres` + `redis`；可选 `runners`、`nginx` | 高并发、水平扩展、强隔离 |
 | Kubernetes | 弹性 | 队列模式容器化编排，Worker 按队列深度扩缩容 | 大规模生产 |
 
 原则：**先用 lite 或 standard 跑起来，遇到瓶颈再拆**。从 SQLite 迁移到 PostgreSQL 比反过来容易得多，所以任何需要长期保留数据的场景建议直接选 standard。
@@ -140,7 +140,7 @@ docker compose logs -f app
 ```yaml
 services:
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: tonglink
@@ -320,9 +320,9 @@ docker run --rm -v tonglink-data:/data -v "$PWD":/backup alpine \
 ## 11. 监控与日志
 
 - 健康检查：`curl http://localhost:8080/actuator/health`。
-- Prometheus 指标：`http://localhost:8080/actuator/prometheus`，包括执行次数、耗时、采集条数、队列深度、Runner 繁忙度、节点错误数。
+- 基础指标：`http://localhost:8080/actuator/metrics` 提供 JVM 与 HTTP 基础指标；当前仅暴露 `health` / `info` / `metrics`，Prometheus 端点与业务指标尚未启用。
 - 应用日志输出到 stdout，用 `docker compose logs -f app` 查看；生产建议接入 Loki / Grafana。
-- 全链路 traceId 贯穿 API、执行器与 Runner；配置 `OTEL_EXPORTER_OTLP_ENDPOINT` 后可在 Jaeger / Tempo 中查看。
+- 全链路 traceId 与 OpenTelemetry 导出属可选增强，当前版本未接入。
 
 ## 12. 安全加固清单
 

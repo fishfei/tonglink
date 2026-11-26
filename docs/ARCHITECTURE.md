@@ -66,7 +66,7 @@ flowchart TB
     end
 
     subgraph Storage["存储层（按部署 profile 切换）"]
-        DB["PostgreSQL 16 + TimescaleDB<br/>或轻量模式 SQLite"]
+        DB["SQLite（默认）/ PostgreSQL 16（标准）<br/>按 DB_URL 前缀切换"]
         RD["Redis / Valkey<br/>仅队列模式需要"]
         FILE["本地目录 / MinIO<br/>节点包与大对象"]
     end
@@ -80,7 +80,7 @@ flowchart TB
         OT["OPC UA / Modbus / S7 / MQTT"]
         IT["HTTP / JDBC / Kafka"]
         BIZ["飞书 / 企业微信 / MES"]
-        LLM["LLM Provider / Ollama"]
+        LLM["可选 LLM（OpenAI 兼容接口）"]
     end
 
     UI --> API
@@ -107,8 +107,8 @@ flowchart TB
 | 形态 | 容器数 | 组成 | 适用场景 |
 |---|---|---|---|
 | **轻量模式 lite** | **1** | `app`（Spring Boot 同时托管前端静态资源、SQLite 内嵌库、进程内队列、内部 Runner 子进程） | 试玩、开发、跑简单工作流；一条 `docker run` 启动 |
-| **标准模式 standard** | **2** | `app` + `postgres:16-timescale` | 团队长期使用、执行记录较多；避免 SQLite 并发写瓶颈 |
-| **队列模式 queue** | **4+** | `app-web` + `app-worker` × N + `postgres` + `redis`；可选 `runners`、`nginx`、`ollama`、监控 | 高并发、需要水平扩展 Worker、需要独立代码沙箱 |
+| **标准模式 standard** | **2** | `app` + `postgres:16-alpine` | 团队长期使用、执行记录较多；避免 SQLite 并发写瓶颈 |
+| **队列模式 queue** | **4+** | `app-web` + `app-worker` × N + `postgres` + `redis`；可选 `runners`、`nginx`、监控 | 高并发、需要水平扩展 Worker、需要独立代码沙箱 |
 | **Kubernetes** | 弹性 | 队列模式的容器化编排，Worker 按队列深度 HPA | 大规模生产 |
 
 说明：
@@ -123,22 +123,22 @@ flowchart TB
 | 层次 | 选型 | 版本基线 | 许可证 | 理由 |
 |---|---|---|---|---|
 | 前端框架 | Vue 3 + TypeScript | 3.5+ | MIT | 用户指定；组合式 API 适合复杂画布 |
-| 构建 | Vite + pnpm | Vite 6+/pnpm 9+ | MIT | 快、workspace 友好 |
+| 构建 | Vite 6 + npm | Vite 6.x / npm 10+ | MIT | 启动快、构建产物可直接由 Spring Boot 托管；仓库用 `package-lock.json` 锁定版本 |
 | DAG 画布 | **`@vue-flow/core` 及配套包** | **1.48.x** | MIT | 成熟的 DAG 画布库（`@vue-flow/core` / `background` / `controls` / `minimap` / `node-resizer`）；上游仓库已归档但版本稳定，锁定版本使用，后续可平滑迁移到 `@xyflow/vue` |
-| 代码编辑 | CodeMirror 6 | 6.x | MIT | 轻量，比 Monaco 更适合嵌入式代码编辑 |
+| 代码编辑 | 原生 textarea（ElInput） | - | MIT（Element Plus） | Node.js / Python 代码以纯文本编辑为主，零额外编辑器依赖 |
 | UI 组件 | Element Plus | 2.x | MIT | 表单/抽屉/表格齐全，Schema 表单好映射 |
 | 图表 | ECharts | 5.x | Apache-2.0 | 看板趋势/柱状/异常标记 |
 | 状态 | Pinia + Vue Router | 最新 | MIT | 类型友好的状态与路由守卫 |
 | 后端 | **Spring Boot 3.5.x + Java 21 LTS** | 3.5 / 21 | Apache-2.0 | 用户选定 3.x 最新稳定文档版；Java 21 兼容性与生态最稳 |
-| 持久层 | MyBatis-Plus + Flyway | 3.5.x | Apache-2.0 | 动态查询方便，JSON 支持好，迁移可追溯 |
-| 主库 | PostgreSQL 16 + TimescaleDB；轻量模式 SQLite | 16 | PostgreSQL / Apache-2.0 | `JSONB` 存流程定义，TimescaleDB 存执行日志与指标 |
-| 队列 | 进程内队列（默认）/ Redis Streams（队列模式） | 7+/Valkey | BSD / 视版本 | 默认零依赖，扩展时按常见队列模式切换 |
-| 调度 | Quartz（支持 JDBC Store） | 2.5.x | Apache-2.0 | Cron + SimpleTrigger 直接覆盖「每 N 秒/分」 |
+| 持久层 | Spring Boot JDBC（JdbcTemplate）+ HikariCP | Spring Boot 3.5 内置 | Apache-2.0 | 手写通用 SQL 屏蔽 SQLite / PostgreSQL 方言差异，无 ORM、无迁移工具 |
+| 主库 | SQLite（默认）/ PostgreSQL 16（标准） | 3.49 / 16 | 公有领域 / PostgreSQL | 同一 jar 含双驱动，按 `DB_URL` 前缀切换；`schema.sql` 建表，流程 JSON 以 TEXT 存储 |
+| 队列 | 进程内队列（默认）/ Redis Streams（队列模式） | Lettuce 6.5 / Redis 7+ | BSD / 视版本 | 默认零依赖，队列模式用消费组 + `XAUTOCLAIM` 接管超时消息 |
+| 调度 | `@Scheduled` + `CronExpression` 轻量调度 | Spring Boot 3.5 内置 | Apache-2.0 | 每 5s tick 扫描 `next_run`，秒/分/Cron 统一换算；单实例足够，不引入 Quartz |
 | 安全 | Spring Security + JWT + AES-GCM | - | Apache-2.0 | 无状态 API，数据源密码字段 AES-GCM 加密 |
-| AI | Spring AI（OpenAI 兼容 / Ollama） | 1.x | Apache-2.0 | Function Calling 原生，便于工具化 |
-| 可观测 | Actuator + Micrometer + OpenTelemetry | - | Apache-2.0 | 一键接 Grafana / Jaeger |
+| AI | 本地规则引擎 + 可选 OpenAI 兼容接口 | - | 本项目 MIT | 默认离线可用；配置 `TONGLINK_AI_PROVIDER=openai` 后走真实 LLM，基于 JDK HttpClient |
+| 可观测 | Spring Boot Actuator（health/info/metrics） | Spring Boot 3.5 内置 | Apache-2.0 | 提供健康检查与基础指标；OTel 链路追踪、Prometheus/Grafana 属可选增强 |
 | 文档 | springdoc-openapi | 2.x | Apache-2.0 | 自动生成 API 文档 |
-| 测试 | Vitest / JUnit 5 + Testcontainers | - | MIT/EPL | 前后端都可自动化验证 |
+| 测试 | Vitest / JUnit 5 + 环境变量门控真机测试 | - | MIT / Apache-2.0 | 前端单测 + 后端集成测试；Kafka/MQTT/PG/Redis/Modbus/OPC UA 用真机联调，不用 Testcontainers |
 
 > **Spring Boot 版本说明**：3.5.x 是 3.x 最后一个功能线，其开源支持已于 2026-06 结束，但仍是最稳定、文档最完整的 3.x 版本。按用户决定采用 3.5.x；代码保持与 4.x 的兼容性（不使用 3.x 专有 API），后续可低风险升级。
 
@@ -152,7 +152,7 @@ flowchart TB
 
 ```
 frontend/
-├─ package.json / pnpm-workspace.yaml / vite.config.ts / tsconfig.json
+├─ package.json / package-lock.json / vite.config.ts / tsconfig.json
 ├─ src/
 │  ├─ main.ts / App.vue
 │  ├─ router/index.ts                 # 路由 + 登录守卫 + 项目上下文
@@ -191,7 +191,7 @@ frontend/
 | `datasource` | ElSelect | 拉取 `GET /datasources`；连接类字段按节点协议过滤，认证类字段列出全部数据源。数据源本身由类型决定类别与协议，不再让用户重复填写 |
 | `credential` | ElSelect | 已并入 `datasource`；节点定义中不再出现该类型 |
 | `secret` | ElInput(type=password) | 仅本地编辑，提交后后端加密，永不回显明文 |
-| `code` | CodeMirror 6 | Node.js / Python 语言切换、语法高亮 |
+| `code` | ElInput(textarea) | Node.js / Python 代码原生文本编辑 |
 | `json` | JSON 编辑器 | 字段映射等结构化配置 |
 | `boolean` | ElSwitch | |
 | `showWhen` | - | `{ key, in: [...] }`，例如数据库节点选 `insert` 才显示写入值 |
@@ -236,7 +236,7 @@ backend/
 ├─ tonglink-datasource/               # 数据源 CRUD、连通性测试、协议元数据
 ├─ tonglink-workflow/                 # 项目、流程定义、版本、导入导出
 ├─ tonglink-node/                     # 节点注册中心、插件安装/卸载、Schema 管理
-├─ tonglink-scheduler/                # Quartz 调度、触发模式转换
+├─ tonglink-scheduler/                # 轻量 @Scheduled 定时调度、触发模式转换
 ├─ tonglink-queue/                    # ExecutionQueue 抽象：进程内实现 / Redis Stream 实现
 ├─ tonglink-execution/                # DAG 执行、日志、统计、Worker profile
 ├─ tonglink-taskrunner/               # Task Runner 管理：内部子进程 / 外部容器 Broker
@@ -297,16 +297,16 @@ backend/
 | `node_package` | id, package_id, version, manifest_json, file_path, status, installed_at | 插件安装记录，支持多版本并存 |
 | `execution` | id, flow_id, flow_version, trigger_type, status, start/end_time, records, error_summary, idempotency_key | 每次运行一条 |
 | `execution_node` | id, execution_id, node_id, node_type, node_version, status, duration_ms, input_ref, output_ref, retry_count | 节点级状态与耗时 |
-| `execution_log` | id, execution_id, node_id, seq, level, message, ts | PostgreSQL 下为 TimescaleDB hypertable；SQLite 下为普通表 |
+| `execution_log` | id, execution_id, node_id, seq, level, message, ts | SQLite / PostgreSQL 下均为普通表（通用 DDL） |
 | `metric_point` | ts, flow_id, node_id, tags, values | 采集数据样本，同上 |
 | `ai_conversation` / `ai_message` | id, user_id, role, content_json, created_at | AI 会话历史 |
 | `audit_log` | id, actor, action, target, ip, ts | 安全审计 |
 
 ### 4.2 关键约定
 
-- 流程定义用 JSON 字段整体存储，结构见第 5 节；避免为节点配置建几十张表。PostgreSQL 用 `JSONB`，SQLite 用 `TEXT` 并在实体层做 JSON 转换。
+- 流程定义用 TEXT 字段整体存储 JSON 字符串（`graph_json` / `published_graph_json`），结构见第 5 节；避免为节点配置建几十张表。SQLite 与 PostgreSQL 通用 DDL，实体层做 JSON 序列化/反序列化。
 - 执行输入/输出超过 64KB 时写入 MinIO（或轻量模式的本地目录），`execution_node` 只存引用；小数据直接内联。
-- PostgreSQL 下 `execution_log` 与 `metric_point` 建 hypertable，配置 30 天热数据 + 压缩归档；看板查询走 `flow_hourly_stat` 连续聚合。SQLite 下用普通表 + 每日定时 `DELETE`，并建立时间索引。
+- `execution_log` 与 `metric_point` 在两种库下均为普通表 + 时间索引，按保留策略定时清理；TimescaleDB hypertable 与连续聚合属可选增强，当前未启用。
 - 所有表带 `created_at` / `updated_at`，主键用 `varchar(32)` 的 ULID（前端友好、可排序）。
 
 ---
@@ -389,9 +389,9 @@ backend/
 
 | mode | 字段 | 调度转换 |
 |---|---|---|
-| `seconds` | interval | Quartz SimpleTrigger，repeatForever，毫秒 = interval × 1000 |
-| `minutes` | interval | Quartz SimpleTrigger，毫秒 = interval × 60 × 1000 |
-| `cron` | expression | Quartz CronTrigger（6 位：秒 分 时 日 月 周） |
+| `seconds` | interval | `ScheduleService` 每 5s tick + `next_run` 判断，间隔 = interval × 1000 毫秒 |
+| `minutes` | interval | 同上，间隔 = interval × 60 × 1000 毫秒 |
+| `cron` | expression | `CronExpression` 计算下次触发时间（6 位：秒 分 时 日 月 周） |
 
 另有 `manual`（不注册调度）。MQTT / Kafka 由外部消息触发器长期订阅并把消息转成一次执行（见 `ExternalTriggerService`）；OPC UA / Modbus 当前以节点轮询读写为主，暂不提供订阅触发器。
 
@@ -435,7 +435,7 @@ sequenceDiagram
 ### 6.2 关键机制
 
 - **队列**：`ExecutionQueue` 两个实现。进程内实现基于阻塞队列 + 数据库持久化，单进程即可跑全部功能；Redis Stream 实现用消费组 `XREADGROUP` + `XACK`，崩溃后由 `XAUTOCLAIM` 接管 Pending 消息，配合 `idempotencyKey` 防重复执行。
-- **触发方式**：手动运行直接入队；定时由 Quartz 触发入队；`overlapPolicy` 支持 `SKIP`（跳过本次）/ `QUEUE`（排队）/ `ALLOW`（并发），进程内用锁与数据库状态判断，队列模式用 Redis 锁 + 计数器。
+- **触发方式**：手动运行直接入队；定时由 `ScheduleService` 扫描 `next_run` 入队；`overlapPolicy` 支持 `SKIP`（跳过本次）/ `QUEUE`（排队）/ `ALLOW`（并发），进程内用锁与数据库状态判断，队列模式用 Redis 锁 + 计数器。
 - **DAG 调度**：拓扑排序后逐层执行；无依赖的分支可配置并行（`parallelism` 默认 4）；条件节点按表达式决定后续分支是否跳过。
 - **重试**：节点 Schema 中声明 `retry: { maxAttempts, backoffMs }`；重试间隔指数退避；只有 `FAILED` 且可重试的错误才重试。
 - **超时**：流程级、节点级、Runner 级三层超时，任一触发即标记 `TIMEOUT` 并释放资源。
@@ -591,9 +591,9 @@ sequenceDiagram
 
 ## 11. AI 能力
 
-- 技术栈：Spring AI（OpenAI 兼容协议 / Ollama 本地模型），Prompt 模板版本化放在 `tonglink-ai/src/main/resources/prompts/`。
-- **自然语言生成流程**：LLM 通过 Function Calling 调用工具 `listNodeDefinitions`、`listDatasources`、`listCredentials`，输出结构化流程 JSON；后端用 JSON Schema 校验 + 环检测 + 必填字段校验后才返回草稿，前端动画加载，用户确认才保存/发布。
-- **失败诊断**：把 `execution_node` 状态、错误堆栈、节点 Schema 与历史相似错误（向量检索）组装成 Prompt，返回结构化 `{ rootCause, evidence[], fixes[] }`，前端渲染诊断卡。
+- 技术栈：默认本地规则引擎（关键词意图识别，零依赖离线可用）；配置 `TONGLINK_AI_PROVIDER=openai` + endpoint/key 后切换 OpenAI 兼容接口。不引入 Spring AI，无外置 Prompt 模板目录。
+- **自然语言生成流程**：规则引擎（或可选 LLM）按平台真实节点契约与数据源输出结构化流程 JSON；后端做节点类型、必填字段校验与环检测后才返回草稿，前端动画加载，用户确认才保存/发布。凭据已并入数据源，无独立 `listCredentials` 工具。
+- **失败诊断**：把 `execution_node` 状态、错误堆栈与节点 Schema 组装成 Prompt（或走本地规则），返回结构化 `{ rootCause, evidence[], fixes[] }`，前端渲染诊断卡；当前未接入向量检索。
 - **异常问答**：`metric_point` 上用统计规则（3-sigma / EWMA）打异常标记，LLM 负责用自然语言解释；问答仅基于已聚合数据，不直接查原始大表。
 - **成本与安全**：token 预算、每用户频率限制、Prompt 注入防护（用户输入与系统指令分隔）、不把凭据明文送进模型。
 
@@ -601,8 +601,8 @@ sequenceDiagram
 
 ## 12. 可观测性与运维
 
-- 全链路 traceId 从 API 透传到执行器再到 Runner（OpenTelemetry）；日志为 JSON 结构，stdout 输出，接 Loki / Grafana。
-- 指标：`flow_run_total`、`flow_run_duration_seconds`、`flow_records_total`、`queue_depth`（队列模式）、`runner_pool_busy`、`node_error_total`，暴露 `/actuator/prometheus`。
+- 当前使用 Slf4j 文本日志输出到 stdout；OpenTelemetry 全链路 traceId 与 Loki 日志聚合属可选增强，暂未接入。
+- 指标：Spring Boot Actuator 当前暴露 `health` / `info` / `metrics`；`flow_run_total` 等业务指标与 `/actuator/prometheus`、Grafana 面板属可选增强，暂未启用。
 - 健康检查：`/actuator/health` 检查数据库、Runner 可达性；队列模式下增加 Redis；Worker 停滞告警。
 - 配置：全部通过环境变量注入，`.env.example` 提供模板；默认无外部秘密硬编码。
 - 备份：`pg_dump`（PostgreSQL 模式）或数据文件复制（SQLite 模式）+ 大对象存储版本化；执行日志按保留策略自动裁剪。
@@ -651,9 +651,9 @@ tonglink-studio/
 
 ### 13.3 测试
 
-- 前端：Vitest 单测 Schema 表单渲染与流程序列化；Playwright 覆盖登录 → 建项目 → 拖节点 → 运行 → 看日志主链路。
-- 后端：JUnit 5 + Testcontainers 测数据库、队列、Runner 调用；执行引擎用固定 DAG fixture 验证拓扑、重试、超时。
-- CI：前端 `pnpm lint && pnpm test && pnpm build`；后端 `mvn verify`；依赖许可证与漏洞扫描。
+- 前端：Vitest 单测流图序列化（`frontend/src/utils/graph.test.ts`）；未引入 Playwright，主链路以手动联调 + 高清截图存档验证。
+- 后端：JUnit 5（spring-boot-starter-test）测数据库、队列、执行引擎；Kafka/MQTT/PostgreSQL/Redis/Modbus/OPC UA 等真机测试由 `TONGLINK_*` 环境变量门控，未使用 Testcontainers。
+- CI：前端 `npm test && npm run build`；后端 `mvn test`；依赖许可证与漏洞扫描。
 
 ---
 
@@ -663,17 +663,17 @@ tonglink-studio/
 
 | 顺序 | 工作项 | 交付内容 | 验收标准 |
 |---|---|---|---|
-| 1 | 工程骨架 | Monorepo、CI、三种部署配置、公共响应/异常、数据库迁移、设计系统 | 一键启动，健康检查通过 |
+| 1 | 工程骨架 | Monorepo、CI、三种部署配置、公共响应/异常、`schema.sql` 建表、设计系统 | 一键启动，健康检查通过 |
 | 2 | 认证与权限 | 登录/刷新/退出、三角色 RBAC、项目级数据权限、审计日志 | 三账号权限差异正确 |
 | 3 | 配置管理 | 项目、数据源（类型化连接与认证表单）、变量、导入导出、单条/全部导出按名称命名 | 与原型交互一致，数据可持久化 |
 | 4 | 流程编排 | DAG 画布（@vue-flow/core）、单击拖动/双击配置、节点库、连线校验、撤销重做、流程版本与发布、导入导出 | 与原型交互一致，JSON 可往返 |
 | 5 | 节点体系 | 触发器（秒/分/Cron）、OPC UA、Modbus、S7comm、MQTT、HTTP、5 种数据库 CRUD、Kafka、飞书多维表格、Node/Python 代码、条件/合并/延时、时序库/HTTP 推送/告警输出 | 每类节点属性由 Schema 驱动，数据库节点按操作类型联动 |
-| 6 | 执行与调度 | DAG 拓扑执行、条件分支、重试、超时、取消、进程内队列、Quartz 调度、节点级日志与采集条数 | 手动与定时执行都生成完整日志 |
+| 6 | 执行与调度 | DAG 拓扑执行、条件分支、重试、超时、取消、进程内队列、轻量 `@Scheduled` 调度、节点级日志与采集条数 | 手动与定时执行都生成完整日志 |
 | 7 | 代码运行 | Task Runner 内部模式（默认）+ 外部模式（可选容器）、模块白名单、超时与资源限制 | 单容器可跑代码节点；死循环不影响主进程 |
 | 8 | 看板与日志 | KPI、趋势/柱状/状态图、下次执行时间、采集条数、异常点、执行列表与节点时间线、输入/输出 JSON、失败详情与筛选 | 与原型展示一致且数据真实 |
 | 9 | AI 能力 | 自然语言生成流程（结构化草稿）、执行失败诊断卡、数据异常问答、三处嵌入入口 | 生成结果可校验、可落库，诊断有根因与修复步骤 |
 | 10 | 节点插件 | 节点管理、内置市场安装/卸载、本地节点包导入、多版本并存、前端自动出现新节点 | 安装自定义节点后无需发版即可使用 |
-| 11 | 加固与文档 | OTel 全链路、指标与健康检查、断网续传、全中文注释检查、项目介绍/架构/部署/节点包文档 | CI 全绿，文档齐备 |
+| 11 | 加固与文档 | Actuator 健康检查与基础指标、Hikari 连接保活、断网续传、全中文注释检查、项目介绍/架构/部署/节点包文档 | CI 全绿，文档齐备 |
 
 ---
 
@@ -683,7 +683,7 @@ tonglink-studio/
 |---|---|---|
 | 1. Java | **21 LTS** | 生态兼容性最稳 |
 | 2. Spring Boot | **3.5.x（3.x 最新稳定文档版）** | 不用 4.x；3.5 OSS 支持已结束，代码保持 4.x 升级兼容 |
-| 3. 数据库 | **PostgreSQL 16 + TimescaleDB**（轻量模式 SQLite） | 标准与队列模式用 PG，轻量模式为单容器而保留 SQLite |
+| 3. 数据库 | **SQLite（默认）/ PostgreSQL 16（标准）** | 同一 jar 双驱动按 `DB_URL` 切换；通用 `schema.sql` 建表，JSON 用 TEXT 存储 |
 | 4. 仓库 | **Monorepo，不分仓** | 前后端、插件示例、文档同仓 |
 | 5. 注释 | **全中文** | Javadoc / JSDoc / 模块 README / SQL 注释均中文 |
 | 6. 文档 | **补充项目介绍与部署文档** | `INTRODUCTION.md` 与 `DEPLOYMENT.md` |

@@ -96,13 +96,13 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 
 ## 4. 技术栈一览
 
-- 前端：Vue 3 + TypeScript + Vite + Pinia + Element Plus + **`@vue-flow/core`（DAG 画布）** + CodeMirror 6 + ECharts。
-- 后端：Java 21 LTS + Spring Boot 3.5.x + Spring Security + MyBatis-Plus + Quartz。
-- 存储：PostgreSQL 16 + TimescaleDB（标准 / 队列模式），SQLite（轻量单容器模式）。
+- 前端：Vue 3 + TypeScript + Vite 6 + npm + Pinia + Element Plus + **`@vue-flow/core`（DAG 画布）** + 原生 textarea 代码编辑 + ECharts。
+- 后端：Java 21 LTS + Spring Boot 3.5.x + Spring Security + Spring Boot JDBC（JdbcTemplate） + 轻量 `@Scheduled` 调度。
+- 存储：SQLite（默认）或 PostgreSQL 16（标准模式），同一 jar 按 `DB_URL` 切换；流程 JSON 以 TEXT 字段存储。
 - 队列：默认进程内队列；队列模式切 Redis Stream。
 - 代码运行：Task Runner 双模式，默认子进程、可选独立容器。
 - 协议：OPC UA 采用 Eclipse Milo `sdk-client`（真实读写），Modbus TCP 采用 j2mod（寄存器 / 线圈读写），MQTT 采用 Eclipse Paho；S7comm 暂未开放。
-- AI：Spring AI，支持 OpenAI 兼容接口与本地 Ollama。
+- AI：默认本地规则引擎（离线可用），配置 `TONGLINK_AI_PROVIDER=openai` 后可接入 OpenAI 兼容接口。
 
 ## 5. 设计参考与开源边界
 
