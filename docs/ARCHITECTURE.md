@@ -365,7 +365,7 @@ backend/
   "nodeVersion": 1,
   "minPlatformVersion": "0.1.0",
   "configSchema": {
-    "title": "MySQL 查询节点",
+    "title": "MySQL 查询",
     "note": "支持 select / insert / update / delete / execute",
     "fields": [
       { "key": "connection", "label": "连接数据源", "type": "datasource", "required": true },
@@ -506,9 +506,9 @@ sequenceDiagram
 ```json
 {
   "id": "pkg-demo",
-  "type": "output", "subtype": "demo", "title": "示例节点",
+  "type": "output", "subtype": "demo", "title": "示例",
   "version": "1.0.0",
-  "schema": { "title": "示例节点", "fields": [ { "key": "url", "label": "地址", "type": "text" } ] },
+  "schema": { "title": "示例", "fields": [ { "key": "url", "label": "地址", "type": "text" } ] },
   "runtime": { "kind": "http", "method": "POST", "url": "https://example.com" }
 }
 ```
@@ -664,7 +664,7 @@ tonglink-studio/
 | 2 | 认证与权限 | 登录/刷新/退出、三角色 RBAC、项目级数据权限、审计日志 | 三账号权限差异正确 |
 | 3 | 配置管理 | 项目、数据源（类型化连接与认证表单）、变量、导入导出、单条/全部导出按名称命名 | 与原型交互一致，数据可持久化 |
 | 4 | 流程编排 | DAG 画布（@vue-flow/core）、单击拖动/双击配置、节点库、连线校验、撤销重做、流程版本与发布、导入导出 | 与原型交互一致，JSON 可往返 |
-| 5 | 节点体系 | 触发器（秒/分/Cron）、OPC UA、Modbus、S7comm、MQTT、HTTP、5 种数据库 CRUD、Kafka、飞书多维表格、Node.js/Python 代码节点、条件/合并/延时、时序库/HTTP 推送/告警输出 | 每类节点属性由 Schema 驱动，数据库节点按操作类型联动 |
+| 5 | 节点体系 | 触发器（秒/分/Cron）、OPC UA、Modbus、S7comm、MQTT、HTTP、5 种数据库 CRUD、Kafka、飞书多维表格、Node/Python 代码、条件/合并/延时、时序库/HTTP 推送/告警输出 | 每类节点属性由 Schema 驱动，数据库节点按操作类型联动 |
 | 6 | 执行与调度 | DAG 拓扑执行、条件分支、重试、超时、取消、进程内队列、Quartz 调度、节点级日志与采集条数 | 手动与定时执行都生成完整日志 |
 | 7 | 代码运行 | Task Runner 内部模式（默认）+ 外部模式（可选容器）、模块白名单、超时与资源限制 | 单容器可跑代码节点；死循环不影响主进程 |
 | 8 | 看板与日志 | KPI、趋势/柱状/状态图、下次执行时间、采集条数、异常点、执行列表与节点时间线、输入/输出 JSON、失败详情与筛选 | 与原型展示一致且数据真实 |

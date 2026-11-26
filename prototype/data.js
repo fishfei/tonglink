@@ -27,7 +27,7 @@
       { type: 'source', subtype: 'mongodb', title: 'MongoDB 查询', icon: 'database', color: 'blue' }
     ] },
     { group: '代码与逻辑', items: [
-      { type: 'code', subtype: 'nodejs', title: 'Node.js 代码', icon: 'code', color: 'purple' },
+      { type: 'code', subtype: 'nodejs', title: 'Node 代码', icon: 'code', color: 'purple' },
       { type: 'code', subtype: 'python', title: 'Python 代码', icon: 'code', color: 'purple' },
       { type: 'logic', subtype: 'condition', title: '条件分支', icon: 'branch', color: 'orange' },
       { type: 'logic', subtype: 'filter', title: '数据过滤', icon: 'filter', color: 'orange' },
@@ -46,7 +46,7 @@
   Proto.NODE_MARKET = [
     { key: 'pkg-redis', type: 'output', subtype: 'redis', title: 'Redis 写入', icon: 'layers', color: 'green',
       desc: '将采集结果写入 Redis List / Stream', author: 'TongLink 官方', version: '1.2.0',
-      schema: { title: 'Redis 写入节点', note: '安装后即可在节点库使用；凭据请选择已配置的 Redis 密码。', fields: [
+      schema: { title: 'Redis 写入', note: '安装后即可在节点库使用；凭据请选择已配置的 Redis 密码。', fields: [
         { key: 'credential', label: 'Redis 凭据', type: 'credential', required: true },
         { key: 'keyPattern', label: 'Key 模板', type: 'text', placeholder: 'plant:{tag}:{date}', required: true },
         { key: 'dataType', label: '写入结构', type: 'select', options: ['List', 'Stream', 'String'], default: 'List' },
@@ -54,7 +54,7 @@
       ] } },
     { key: 'pkg-influxdb', type: 'output', subtype: 'influxdb', title: 'InfluxDB 写入', icon: 'database', color: 'green',
       desc: '按measurement与tag写入时序数据', author: '社区贡献 · factory-io', version: '0.9.3',
-      schema: { title: 'InfluxDB 写入节点', note: '支持行协议批量写入，需选择已建数据源。', fields: [
+      schema: { title: 'InfluxDB 写入', note: '支持行协议批量写入，需选择已建数据源。', fields: [
         { key: 'datasource', label: '数据源', type: 'datasource', required: true },
         { key: 'measurement', label: 'Measurement', type: 'text', placeholder: 'telemetry', required: true },
         { key: 'tags', label: 'Tag 字段', type: 'text', placeholder: 'device_id, tag' },
@@ -62,7 +62,7 @@
       ] } },
     { key: 'pkg-wecom', type: 'output', subtype: 'wecom', title: '企业微信机器人', icon: 'webhook', color: 'green',
       desc: '推送文本/Markdown 消息到群机器人', author: '社区贡献 · ops-lab', version: '1.0.1',
-      schema: { title: '企业微信机器人节点', note: 'Webhook 地址建议存入凭据后下拉选择。', fields: [
+      schema: { title: '企业微信机器人', note: 'Webhook 地址建议存入凭据后下拉选择。', fields: [
         { key: 'credential', label: '机器人凭据', type: 'credential', required: true },
         { key: 'msgType', label: '消息类型', type: 'select', options: ['text', 'markdown'], default: 'markdown' },
         { key: 'content', label: '消息模板', type: 'textarea', rows: 3, placeholder: '设备 {{ $json.device }} 告警' }
@@ -86,7 +86,7 @@
   }
   function dbSchema(engine, extraHint) {
     return {
-      title: engine + ' 数据库节点',
+      title: engine + ' 数据库',
       note: '支持增删改查；字段按需显示。连接建议引用凭据，不要在流程中明文写密码。' + (extraHint || ''),
       fields: [
         f('connection', '连接数据源', 'datasource', { required: true, hint: '从已创建的数据源中选择，无需手填连接串' }),
@@ -121,7 +121,7 @@
       f('desc', '说明', 'text', { placeholder: '按需手动执行' })
     ] },
 
-    'source:opcua': { title: 'OPC UA 读取节点', note: '采集前请确认服务端证书信任与节点访问权限。', fields: [
+    'source:opcua': { title: 'OPC UA 读取', note: '采集前请确认服务端证书信任与节点访问权限。', fields: [
       f('datasource', '数据源', 'datasource', { required: true, hint: '从数据源管理中选择已配置的 OPC UA 连接' }),
       f('nodeId', '节点 ID', 'text', { placeholder: 'ns=3;s=Temperature.PT101', required: true }),
       f('readMode', '读取方式', 'select', { options: ['订阅 (Subscription)', '轮询 (Poll)'], default: '订阅 (Subscription)' }),
@@ -129,7 +129,7 @@
       f('qualityFilter', '质量戳过滤', 'select', { options: ['仅 GOOD', '不过滤'], default: '仅 GOOD' }),
       f('timeout', '超时时间', 'text', { placeholder: '5000ms', default: '5000ms' })
     ] },
-    'source:modbus': { title: 'Modbus 读取节点', note: '寄存器地址从 40001 起算时，请在工具中确认与协议地址的偏移关系。', fields: [
+    'source:modbus': { title: 'Modbus 读取', note: '寄存器地址从 40001 起算时，请在工具中确认与协议地址的偏移关系。', fields: [
       f('datasource', '数据源', 'datasource', { required: true, hint: '从数据源管理中选择已配置的 Modbus TCP 连接' }),
       f('port', '端口', 'number', { placeholder: '502', default: '502' }),
       f('slaveId', '从站号', 'number', { placeholder: '1', default: '1' }),
@@ -139,7 +139,7 @@
       f('byteOrder', '字节序', 'select', { options: ['ABCD', 'CDAB', 'BADC', 'DCBA'], default: 'ABCD' }),
       f('pollInterval', '轮询间隔', 'text', { placeholder: '500ms', default: '500ms' })
     ] },
-    'source:mqtt': { title: 'MQTT 订阅节点', note: '支持通配符主题；生产环境建议启用认证并使用 TLS。', fields: [
+    'source:mqtt': { title: 'MQTT 订阅', note: '支持通配符主题；生产环境建议启用认证并使用 TLS。', fields: [
       f('datasource', '数据源', 'datasource', { required: true, hint: '从数据源管理中选择已配置的 MQTT Broker' }),
       f('topic', '订阅主题', 'text', { placeholder: 'plant/+/temp', required: true }),
       f('qos', 'QoS', 'select', { options: ['0', '1', '2'], default: '1' }),
@@ -149,7 +149,7 @@
       f('username', '用户名凭据', 'credential', { hint: '从变量配置 → 凭据中选择' }),
       f('password', '密码凭据', 'credential', { hint: '从变量配置 → 凭据中选择' })
     ] },
-    'source:s7comm': { title: 'S7comm 读取节点', note: '面向西门子 S7-300/400/1200/1500 PLC 的数据块读取。', fields: [
+    'source:s7comm': { title: 'S7comm 读取', note: '面向西门子 S7-300/400/1200/1500 PLC 的数据块读取。', fields: [
       f('datasource', '数据源', 'datasource', { required: true, hint: '从数据源管理中选择已配置的 S7comm 连接' }),
       f('rack', '机架号', 'number', { placeholder: '0', default: '0' }),
       f('slot', '槽号', 'number', { placeholder: '1', default: '1' }),
@@ -158,7 +158,7 @@
       f('length', '读取长度（字节）', 'number', { placeholder: '32', default: '32' }),
       f('pollInterval', '轮询间隔', 'text', { placeholder: '2000ms', default: '2000ms' })
     ] },
-    'source:http': { title: 'HTTP 请求节点', note: '请求头与查询参数使用 JSON 格式，敏感值请引用凭据。', fields: [
+    'source:http': { title: 'HTTP 请求', note: '请求头与查询参数使用 JSON 格式，敏感值请引用凭据。', fields: [
       f('method', '请求方法', 'select', { options: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], default: 'GET' }),
       f('url', '请求地址', 'text', { placeholder: 'https://mes.factory.local/api/v1/orders', required: true }),
       f('query', '查询参数 (JSON)', 'textarea', { rows: 3, placeholder: '{"date": "today"}' }),
@@ -167,7 +167,7 @@
       f('expectedStatus', '期望状态码', 'text', { placeholder: '200', default: '200' }),
       f('timeout', '超时时间', 'text', { placeholder: '10000ms', default: '10000ms' })
     ] },
-    'source:kafka': { title: 'Kafka 消费节点', note: '消费位点与分组提交策略会影响数据重复性。', fields: [
+    'source:kafka': { title: 'Kafka 消费', note: '消费位点与分组提交策略会影响数据重复性。', fields: [
       f('datasource', '数据源', 'datasource', { required: true, hint: '从数据源管理中选择已配置的 Kafka 连接' }),
       f('topic', 'Topic', 'text', { placeholder: 'factory.events', required: true }),
       f('groupId', 'Consumer Group', 'text', { placeholder: 'dfs-collector', required: true }),
@@ -181,7 +181,7 @@
     'source:oracle': dbSchema('Oracle', ' Oracle 表名通常为大写，注意引号与大小写。'),
     'source:postgres': dbSchema('PostgreSQL'),
     'source:sqlserver': dbSchema('SQL Server'),
-    'source:mongodb': { title: 'MongoDB 节点', note: '查询条件与更新内容使用 JSON 格式。', fields: [
+    'source:mongodb': { title: 'MongoDB', note: '查询条件与更新内容使用 JSON 格式。', fields: [
       f('connection', '连接数据源', 'datasource', { required: true, hint: '从数据源管理中选择已配置的 MongoDB 连接' }),
       f('operation', '操作类型', 'select', { options: ['find', 'insertOne', 'insertMany', 'updateMany', 'deleteMany', 'aggregate'], default: 'find' }),
       f('collection', '集合', 'text', { placeholder: 'plant.events', required: true }),
@@ -193,7 +193,7 @@
       f('timeout', '超时时间', 'text', { placeholder: '30000ms', default: '30000ms' })
     ] },
 
-    'code:nodejs': { title: 'Node.js 代码节点', note: '生产环境在独立进程/容器中执行，配置模块白名单与资源上限。可用 $input / $json / $vars / $env。', fields: [
+    'code:nodejs': { title: 'Node 代码', note: '生产环境在独立进程/容器中执行，配置模块白名单与资源上限。可用 $input / $json / $vars / $env。', fields: [
       f('code', '脚本', 'code', { required: true }),
       f('timeout', '任务超时', 'text', { placeholder: '300s', default: '300s' }),
       f('memoryLimit', '内存上限', 'select', { options: ['128MB', '256MB', '512MB'], default: '256MB' }),
@@ -201,7 +201,7 @@
       f('inputMode', '输入模式', 'select', { options: ['逐条执行', '整批执行'], default: '整批执行' }),
       f('retry', '失败重试次数', 'select', { options: ['0', '1', '2', '3'], default: '0' })
     ] },
-    'code:python': { title: 'Python 代码节点', note: '生产环境在独立 Python 进程中执行；使用 _items 读取输入，返回列表作为输出。', fields: [
+    'code:python': { title: 'Python 代码', note: '生产环境在独立 Python 进程中执行；使用 _items 读取输入，返回列表作为输出。', fields: [
       f('code', '脚本', 'code', { required: true }),
       f('timeout', '任务超时', 'text', { placeholder: '300s', default: '300s' }),
       f('memoryLimit', '内存上限', 'select', { options: ['128MB', '256MB', '512MB'], default: '256MB' }),
@@ -210,31 +210,31 @@
       f('retry', '失败重试次数', 'select', { options: ['0', '1', '2', '3'], default: '0' })
     ] },
 
-    'logic:condition': { title: '条件分支节点', note: '根据表达式结果将数据分流到 true / false 端口。', fields: [
+    'logic:condition': { title: '条件分支', note: '根据表达式结果将数据分流到 true / false 端口。', fields: [
       f('expression', '条件表达式', 'text', { placeholder: '{{ $json.temp > $vars.TEMP_THRESHOLD }}', required: true }),
       f('mode', '分支模式', 'select', { options: ['二分支 (true/false)', '多分支 (Switch)'], default: '二分支 (true/false)' }),
       f('unmatched', '未匹配处理', 'select', { options: ['丢弃', '走默认分支'], default: '丢弃' }),
       f('desc', '说明', 'text', { placeholder: '温度超阈值时进入告警分支' })
     ] },
-    'logic:filter': { title: '数据过滤节点', note: '仅保留满足表达式的数据项。', fields: [
+    'logic:filter': { title: '数据过滤', note: '仅保留满足表达式的数据项。', fields: [
       f('expression', '过滤表达式', 'text', { placeholder: '{{ $json.quality === "GOOD" }}', required: true }),
       f('maxItems', '最大保留条数', 'number', { placeholder: '1000', default: '1000' }),
       f('desc', '说明', 'text', { placeholder: '过滤无效质量戳' })
     ] },
-    'logic:merge': { title: '数据合并节点', note: '将多路输入合并为单一输出。', fields: [
+    'logic:merge': { title: '数据合并', note: '将多路输入合并为单一输出。', fields: [
       f('strategy', '合并策略', 'select', { options: ['追加', '按字段合并', '覆盖'], default: '追加' }),
       f('matchField', '匹配字段', 'text', { placeholder: 'device_id', showWhen: { key: 'strategy', in: ['按字段合并'] } }),
       f('dedupe', '去重', 'select', { options: ['是', '否'], default: '否' }),
       f('maxItems', '最大条数', 'number', { placeholder: '5000', default: '5000' })
     ] },
-    'logic:delay': { title: '延时等待节点', note: '用于错峰写入或等待上游设备就绪。', fields: [
+    'logic:delay': { title: '延时等待', note: '用于错峰写入或等待上游设备就绪。', fields: [
       f('duration', '延时时长', 'number', { placeholder: '5', required: true }),
       f('unit', '单位', 'select', { options: ['毫秒', '秒', '分钟'], default: '秒' }),
       f('blockDownstream', '阻塞下游', 'select', { options: ['是', '否'], default: '是' }),
       f('desc', '说明', 'text', { placeholder: '等待 PLC 数据就绪' })
     ] },
 
-    'output:timeseries': { title: '写入时序库节点', note: '建议批量写入并指定时间字段与标签字段。', fields: [
+    'output:timeseries': { title: '写入时序库', note: '建议批量写入并指定时间字段与标签字段。', fields: [
       f('connection', '目标数据源', 'datasource', { required: true, hint: '从数据源管理中选择，不再手填 DS ID' }),
       f('table', '表 / 测量', 'text', { placeholder: 'plant_a.telemetry', required: true }),
       f('writeMode', '写入模式', 'select', { options: ['追加', '覆盖', 'UPSERT'], default: '追加' }),
@@ -244,7 +244,7 @@
       f('outOfOrder', '乱序数据处理', 'select', { options: ['丢弃', '缓冲重排'], default: '丢弃' }),
       f('timeout', '超时时间', 'text', { placeholder: '10000ms', default: '10000ms' })
     ] },
-    'output:http': { title: 'HTTP 推送节点', note: '失败时按配置重试；请求体支持 {{ $json.xxx }} 模板变量。', fields: [
+    'output:http': { title: 'HTTP 推送', note: '失败时按配置重试；请求体支持 {{ $json.xxx }} 模板变量。', fields: [
       f('method', '请求方法', 'select', { options: ['POST', 'PUT', 'PATCH', 'GET'], default: 'POST' }),
       f('url', '目标地址', 'text', { placeholder: 'https://mes.factory.local/api/v1/oee', required: true }),
       f('auth', '认证凭据', 'credential', { hint: '从变量配置 → 凭据中选择' }),
@@ -253,7 +253,7 @@
       f('timeout', '超时时间', 'text', { placeholder: '10000ms', default: '10000ms' }),
       f('successCodes', '成功状态码', 'text', { placeholder: '200,201', default: '200,201' })
     ] },
-    'output:feishu_bitable': { title: '飞书多维表格节点', note: '通过飞书开放平台「多维表格」API 写入记录；需先在变量配置中创建 App ID / App Secret 凭据。', fields: [
+    'output:feishu_bitable': { title: '飞书多维表格', note: '通过飞书开放平台「多维表格」API 写入记录；需先在变量配置中创建 App ID / App Secret 凭据。', fields: [
       f('credential', '飞书应用凭据', 'credential', { required: true, hint: '下拉选择已建的飞书应用凭据（App ID / App Secret）' }),
       f('appToken', '多维表格 App Token', 'text', { placeholder: 'bascnCMII2O...', required: true, hint: '打开多维表格后，URL 中 /base/ 后面的一段' }),
       f('tableId', '数据表 ID (table_id)', 'text', { placeholder: 'tblsRc9GRRXKqhvW', required: true, hint: '以 tbl 开头，可在表格 URL 或 API 中获取' }),
@@ -266,7 +266,7 @@
       f('retry', '失败重试次数', 'select', { options: ['0', '1', '2', '3'], default: '2' }),
       f('timeout', '超时时间', 'text', { placeholder: '10000ms', default: '10000ms' })
     ] },
-    'output:alert': { title: '告警通知节点', note: '支持重复告警抑制，避免刷屏。', fields: [
+    'output:alert': { title: '告警通知', note: '支持重复告警抑制，避免刷屏。', fields: [
       f('channel', '告警渠道', 'select', { options: ['企业微信', '钉钉', '邮件', 'Webhook'], default: '企业微信' }),
       f('credential', '通知凭据', 'credential', { hint: '可选，从变量配置 → 凭据中选择' }),
       f('webhook', 'Webhook / 收件人', 'text', { placeholder: 'https://qyapi.weixin.qq.com/... 或 ops@factory.local' }),

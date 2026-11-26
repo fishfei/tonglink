@@ -48,12 +48,12 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 |---|---|
 | 触发器 | 手动触发、定时触发、事件订阅（MQTT / Kafka） |
 | 数据源 | MQTT、HTTP、Kafka、MySQL、Oracle、PostgreSQL、SQL Server、MongoDB |
-| 代码与逻辑 | node 代码、Python 代码、条件分支、数据合并、延时等待 |
+| 代码与逻辑 | Node 代码、Python 代码、条件分支、数据合并、延时等待 |
 | 输出 | 写入时序库、HTTP 推送、告警通知、飞书多维表格 |
 
-数据库节点支持 `select / insert / update / delete / execute`（MongoDB 为 find/insert/update/delete/aggregate），属性字段随操作类型联动。飞书多维表格节点支持新增、更新、查询、删除记录与字段映射。
+数据库支持 `select / insert / update / delete / execute`（MongoDB 为 find/insert/update/delete/aggregate），属性字段随操作类型联动。飞书多维表格支持新增、更新、查询、删除记录与字段映射。
 
-告警通知节点支持企业微信、钉钉、邮件、通用 Webhook 四种渠道：选择「邮件」时引用「邮件 SMTP」数据源（服务器、端口、SSL/STARTTLS、发件账号与授权码），在「Webhook 地址 / 收件人」填收件邮箱；标题与正文支持 `{{ $json.字段 }}` 模板，并可设置重复告警抑制分钟数。未配置凭据或目标为占位地址时只生成模拟回执，便于无第三方账号时演示编排。
+告警通知支持企业微信、钉钉、邮件、通用 Webhook 四种渠道：选择「邮件」时引用「邮件 SMTP」数据源（服务器、端口、SSL/STARTTLS、发件账号与授权码），在「Webhook 地址 / 收件人」填收件邮箱；标题与正文支持 `{{ $json.字段 }}` 模板，并可设置重复告警抑制分钟数。未配置凭据或目标为占位地址时只生成模拟回执，便于无第三方账号时演示编排。
 
 ### 2.5 变量与数据源
 

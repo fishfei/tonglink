@@ -91,7 +91,7 @@
         {
           "type": "code",
           "subtype": "nodejs",
-          "title": "node 代码",
+          "title": "Node 代码",
           "icon": "code",
           "color": "purple"
         },
@@ -438,7 +438,7 @@
       ]
     },
     "source:http": {
-      "title": "HTTP 请求节点",
+      "title": "HTTP 请求",
       "note": "请求头与查询参数使用 JSON 格式，敏感值请引用数据源中的认证配置。",
       "fields": [
         {
@@ -498,7 +498,7 @@
       ]
     },
     "source:mysql": {
-      "title": "MySQL 数据库节点",
+      "title": "MySQL 数据库",
       "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。",
       "fields": [
         {
@@ -633,7 +633,7 @@
       ]
     },
     "source:oracle": {
-      "title": "Oracle 数据库节点",
+      "title": "Oracle 数据库",
       "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。 Oracle 表名通常为大写，注意引号与大小写。",
       "fields": [
         {
@@ -768,7 +768,7 @@
       ]
     },
     "source:postgres": {
-      "title": "PostgreSQL 数据库节点",
+      "title": "PostgreSQL 数据库",
       "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。",
       "fields": [
         {
@@ -903,7 +903,7 @@
       ]
     },
     "source:sqlserver": {
-      "title": "SQL Server 数据库节点",
+      "title": "SQL Server 数据库",
       "note": "支持增删改查；字段按需显示。连接建议引用数据源认证，不要在流程中明文写密码。",
       "fields": [
         {
@@ -1038,7 +1038,7 @@
       ]
     },
     "source:mongodb": {
-      "title": "MongoDB 节点",
+      "title": "MongoDB",
       "note": "查询条件与更新内容使用 JSON 格式。",
       "fields": [
         {
@@ -1133,7 +1133,7 @@
       ]
     },
     "code:nodejs": {
-      "title": "node 代码节点",
+      "title": "Node 代码",
       "note": "生产环境在独立进程/容器中执行，配置模块白名单与资源上限。可用 $input / $json / $vars / $env。",
       "fields": [
         {
@@ -1192,7 +1192,7 @@
       ]
     },
     "code:python": {
-      "title": "Python 代码节点",
+      "title": "Python 代码",
       "note": "生产环境在独立 Python 进程中执行；使用 _items 读取输入，返回列表作为输出。",
       "fields": [
         {
@@ -1251,7 +1251,7 @@
       ]
     },
     "logic:condition": {
-      "title": "条件分支节点",
+      "title": "条件分支",
       "note": "逐条数据求值：命中走 true 端口，其余走 false 端口。复杂多路分支可串联多个条件节点。",
       "fields": [
         {
@@ -1291,7 +1291,7 @@
       ]
     },
     "logic:filter": {
-      "title": "数据过滤节点",
+      "title": "数据过滤",
       "note": "仅保留满足表达式的数据项。",
       "fields": [
         {
@@ -1317,7 +1317,7 @@
       ]
     },
     "logic:merge": {
-      "title": "数据合并节点",
+      "title": "数据合并",
       "note": "将多路输入合并为单一输出。",
       "fields": [
         {
@@ -1363,7 +1363,7 @@
       ]
     },
     "logic:delay": {
-      "title": "延时等待节点",
+      "title": "延时等待",
       "note": "异步等待：有输入也有输出；到期后把输入原样放行给下游，不占用工作线程；单次最长 24 小时。",
       "fields": [
         {
@@ -1394,7 +1394,7 @@
       ]
     },
     "output:kafka": {
-      "title": "Kafka 输出节点",
+      "title": "Kafka 输出",
       "note": "把上游每一行数据作为一条消息发送到 Topic；支持 JSON 与纯文本序列化。",
       "fields": [
         {
@@ -1440,7 +1440,7 @@
       ]
     },
     "output:mqtt": {
-      "title": "MQTT 输出节点",
+      "title": "MQTT 输出",
       "note": "把上游每一行数据发布到指定主题，支持 QoS 与 Retained。",
       "fields": [
         {
@@ -1501,7 +1501,7 @@
       ]
     },
     "output:timeseries": {
-      "title": "写入时序库节点",
+      "title": "写入时序库",
       "note": "建议批量写入并指定时间字段与标签字段。",
       "fields": [
         {
@@ -1570,7 +1570,7 @@
       ]
     },
     "output:http": {
-      "title": "HTTP 推送节点",
+      "title": "HTTP 推送",
       "note": "失败时按配置重试；请求体支持 {{ $json.xxx }} 模板变量。",
       "fields": [
         {
@@ -1634,7 +1634,7 @@
       ]
     },
     "output:feishu_bitable": {
-      "title": "飞书多维表格节点",
+      "title": "飞书多维表格",
       "note": "通过飞书开放平台「多维表格」API 写入记录；需先在数据源中创建飞书应用认证（App ID / App Secret）。",
       "fields": [
         {
@@ -1757,7 +1757,7 @@
       ]
     },
     "output:alert": {
-      "title": "告警通知节点",
+      "title": "告警通知",
       "note": "渠道为邮件时，请选择邮件 SMTP 凭据并在「Webhook / 收件人」填写邮箱；支持重复告警抑制。未配置凭据时仅演示回执，不会真实发送。",
       "fields": [
         {
@@ -1860,7 +1860,7 @@
         "kind": "redis"
       },
       "schema": {
-        "title": "Redis 写入节点",
+        "title": "Redis 写入",
         "note": "安装后即可在节点库使用；凭据请选择已配置的 Redis 密码。",
         "fields": [
           {
@@ -1910,7 +1910,7 @@
         "kind": "influxdb"
       },
       "schema": {
-        "title": "InfluxDB 写入节点",
+        "title": "InfluxDB 写入",
         "note": "支持行协议批量写入，需选择已建数据源。",
         "fields": [
           {
@@ -1955,7 +1955,7 @@
         "kind": "wecom"
       },
       "schema": {
-        "title": "企业微信机器人节点",
+        "title": "企业微信机器人",
         "note": "Webhook 地址建议存入凭据后下拉选择。",
         "fields": [
           {

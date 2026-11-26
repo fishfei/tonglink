@@ -90,5 +90,5 @@ docker compose -f docker/docker-compose.lite.yml up -d
 | `TONGLINK_JWT_SECRET` | 开发用默认值 | JWT 签名密钥，生产必须修改 |
 | `TONGLINK_QUEUE_TYPE` | `inmemory` | 切换 `redis` 进入队列模式 |
 | `TONGLINK_AI_PROVIDER` | `local` | 切换 `openai` 并配置 endpoint/key |
-| `TONGLINK_NODE_CMD` | `node` | Node.js 代码节点运行时命令 |
-| `TONGLINK_PYTHON_CMD` | `python3` | Python 代码节点运行时命令 |
+| `TONGLINK_NODE_CMD` | `node` | Node 代码运行时命令 |
+| `TONGLINK_PYTHON_CMD` | `python3` | Python 代码运行时命令 |
