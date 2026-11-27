@@ -65,7 +65,16 @@ tonglink:
   redis:
     uri: ${TONGLINK_REDIS_URI:redis://localhost:6379}
   scheduler:
+    # 对齐器扫描间隔（不是触发精度）；每条流程的触发由一次性 timer 在精确时刻执行
     interval-ms: 5000
+    enabled: ${TONGLINK_SCHEDULER_ENABLED:true}
+    # 独立定时器线程池；生产按同一秒到点流程数调整，clamp 1-32
+    timer-threads: ${TONGLINK_SCHEDULER_TIMER_THREADS:3}
+    # 迟到超过该窗口且未开启「错过执行补偿」时跳过本次触发
+    misfire-grace-ms: ${TONGLINK_SCHEDULER_MISFIRE_GRACE_MS:60000}
+  execution:
+    # RUNNING 超过该时长视为卡死：不再阻塞定时触发，并在调度轮次中标记 FAILED
+    running-stale-ms: ${TONGLINK_RUNNING_STALE_MS:1800000}
   runner:
     node-command: ${TONGLINK_NODE_CMD:node}
     python-command: ${TONGLINK_PYTHON_CMD:python3}

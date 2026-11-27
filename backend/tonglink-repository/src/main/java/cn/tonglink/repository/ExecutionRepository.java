@@ -10,6 +10,7 @@ import cn.tonglink.model.entity.Execution;
 import cn.tonglink.model.entity.ExecutionLog;
 import cn.tonglink.model.entity.ExecutionNode;
 import cn.tonglink.model.entity.WaitState;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -113,6 +114,31 @@ public class ExecutionRepository {
         sql.append(" ORDER BY start_time DESC LIMIT ?");
         args.add(limit);
         return jdbc.query(sql.toString(), EXECUTION, args.toArray());
+    }
+
+    /**
+     * 查询某流程最近仍在运行的执行（只在给定截止时间之后开始）。
+     *
+     * <p>调度器用它判断「上一轮是否还在跑」。历史遗留的 RUNNING 记录（例如进程被强制结束）
+     * 开始时间很久远，不该永久挡住后续所有定时触发。</p>
+     */
+    public List<Execution> runningSince(String flowId, String startedAfter, int limit) {
+        return jdbc.query("""
+                SELECT * FROM execution WHERE flow_id=? AND status='RUNNING' AND start_time>=?
+                ORDER BY start_time DESC LIMIT ?
+                """, EXECUTION, flowId, startedAfter, limit);
+    }
+
+    /**
+     * 把超过截止时间仍处于 RUNNING 的执行标记为失败。
+     *
+     * @return 被标记失败的记录数
+     */
+    public int failStaleRunning(String cutoff, String error) {
+        return jdbc.update("""
+                UPDATE execution SET status='FAILED', end_time=?, error_summary=?
+                WHERE status='RUNNING' AND start_time<?
+                """, LocalDateTime.now().withNano(0).toString(), error, cutoff);
     }
 
     /**

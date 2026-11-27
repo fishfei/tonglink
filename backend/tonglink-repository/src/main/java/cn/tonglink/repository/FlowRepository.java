@@ -7,6 +7,7 @@ package cn.tonglink.repository;
 import cn.tonglink.model.entity.Flow;
 import cn.tonglink.model.entity.FlowVersion;
 import cn.tonglink.model.entity.NodePackage;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -97,6 +98,43 @@ public class FlowRepository {
                 """, f.projectId(), f.name(), f.description(), f.status(), f.graphJson(),
                 f.publishedGraphJson(), f.publishedVersion(), f.nextRun(), f.lastRun(), f.records(),
                 f.successRate(), f.updatedAt(), f.id());
+    }
+
+    /**
+     * 条件认领下次调度时间：仅当数据库中的值仍等于 expected 时才推进。
+     *
+     * <p>多实例共用同一数据库时，只有一个实例能成功推进；其余实例据此放弃本次触发，
+     * 无需引入分布式锁。占位值（空/—）视为「尚未初始化」，允许初始化认领。</p>
+     *
+     * @return 是否认领成功
+     */
+    public boolean claimNextRun(String id, String expected, String next) {
+        String now = LocalDateTime.now().withNano(0).toString();
+        int rows;
+        if (expected == null || expected.isBlank() || "—".equals(expected)) {
+            rows = jdbc.update("""
+                    UPDATE flow_definition SET next_run=?, updated_at=?
+                    WHERE id=? AND (next_run IS NULL OR next_run='' OR next_run='—')
+                    """, next, now, id);
+        } else {
+            rows = jdbc.update("""
+                    UPDATE flow_definition SET next_run=?, updated_at=? WHERE id=? AND next_run=?
+                    """, next, now, id, expected);
+        }
+        return rows > 0;
+    }
+
+    /**
+     * 执行结束时只刷新统计字段，绝不覆盖 {@code next_run}。
+     *
+     * <p>调度器在提交执行前就已推进 {@code next_run}，若这里沿用整行 updateFlow，
+     * 会用执行开始时读到的旧值把它改回去，造成同一周期重复触发。</p>
+     */
+    public void updateFlowStats(String id, String lastRun, long records) {
+        jdbc.update("""
+                UPDATE flow_definition SET last_run=?, records=?, success_rate='100%', updated_at=?
+                WHERE id=?
+                """, lastRun, records, LocalDateTime.now().withNano(0).toString(), id);
     }
 
     /** 删除流程；版本快照保留，便于审计与回溯。 */

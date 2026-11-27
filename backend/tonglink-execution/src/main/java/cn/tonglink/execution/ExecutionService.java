@@ -26,6 +26,7 @@ import cn.tonglink.repository.MetaRepository;
 import cn.tonglink.workflow.FlowService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.PostConstruct;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -76,10 +78,17 @@ public class ExecutionService {
     private final ExecutionQueue queue;
     private final ExecutionEventBus bus;
 
+    /**
+     * RUNNING 超过该时长视为卡死（进程被强制结束、队列消费者丢失等）。
+     * 默认 30 分钟：大于绝大多数单次执行的耗时，又不至于让残留记录永久挡住定时触发。
+     */
+    private final long runningStaleMs;
+
     public ExecutionService(ExecutionRepository executions, FlowRepository flowsRepo,
                             MetaRepository meta, FlowService flowService,
                             NodeExecutorRegistry executorRegistry, ExecutionQueue queue,
-                            ExecutionEventBus bus) {
+                            ExecutionEventBus bus,
+                            @Value("${tonglink.execution.running-stale-ms:1800000}") long runningStaleMs) {
         this.executions = executions;
         this.flowsRepo = flowsRepo;
         this.meta = meta;
@@ -87,6 +96,7 @@ public class ExecutionService {
         this.executorRegistry = executorRegistry;
         this.queue = queue;
         this.bus = bus;
+        this.runningStaleMs = Math.max(60_000L, runningStaleMs);
     }
 
     /** 应用启动后注册消费者，开始处理队列中的任务。 */
@@ -459,10 +469,8 @@ public class ExecutionService {
 
     /** 刷新流程的累计采集量与最近运行时间。 */
     private void updateFlowStats(Flow flow, long records) {
-        Flow updated = new Flow(flow.id(), flow.projectId(), flow.name(), flow.description(),
-                flow.status(), flow.graphJson(), flow.publishedGraphJson(), flow.publishedVersion(),
-                flow.nextRun(), now(), flow.records() + records, "100%", flow.createdAt(), now());
-        flowsRepo.updateFlow(updated);
+        // 只更新统计字段：调度器在提交执行前已推进 next_run，整行覆盖会把它回退成旧值。
+        flowsRepo.updateFlowStats(flow.id(), now(), flow.records() + records);
         executions.saveMetric(now(), flow.id(), null,
                 JsonUtil.stringify(Map.of("projectId", flow.projectId() == null ? "" : flow.projectId())),
                 JsonUtil.stringify(Map.of("records", records)));
@@ -487,9 +495,35 @@ public class ExecutionService {
                 "message", safeMessage, "ts", entry.ts()));
     }
 
-    /** 是否存在运行中的执行，供调度器避免任务堆积。 */
+    /**
+     * 是否存在运行中的执行，供调度器避免任务堆积。
+     *
+     * <p>只认最近 {@link #runningStaleMs} 内开始的 RUNNING。进程被强制结束时留下的历史
+     * RUNNING 记录永远不会自行变成终态，若不加时间过滤，会让该流程之后所有定时触发都被跳过。</p>
+     */
     public boolean hasRunning(String flowId) {
-        return !executions.executions(flowId, "RUNNING", 1).isEmpty();
+        String cutoff = LocalDateTime.now().minus(Duration.ofMillis(runningStaleMs))
+                .format(TIME_FORMAT);
+        return !executions.runningSince(flowId, cutoff, 1).isEmpty();
+    }
+
+    /**
+     * 把超过 {@link #runningStaleMs} 仍未结束的 RUNNING 执行标记为 FAILED。
+     *
+     * <p>由调度器在每轮对齐前调用，避免残留记录一直留在运行中列表里。</p>
+     *
+     * @return 本次标记失败的记录数
+     */
+    public int failStaleRunning() {
+        String cutoff = LocalDateTime.now().minus(Duration.ofMillis(runningStaleMs))
+                .format(TIME_FORMAT);
+        String error = "执行超过 " + (runningStaleMs / 60_000L)
+                + " 分钟仍未结束，判定为卡死";
+        int cleaned = executions.failStaleRunning(cutoff, error);
+        if (cleaned > 0) {
+            log.warn("清理 {} 条卡死的执行记录（RUNNING 超过 {} ms）", cleaned, runningStaleMs);
+        }
+        return cleaned;
     }
 
     @SuppressWarnings("unchecked")

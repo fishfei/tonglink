@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import cn.tonglink.execution.ExecutionService;
+import cn.tonglink.repository.FlowRepository;
+import cn.tonglink.scheduler.ScheduleService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
@@ -25,6 +27,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -59,6 +62,12 @@ class IntegrationTest {
     private ExecutionService executionService;
 
     @Autowired
+    private ScheduleService scheduleService;
+
+    @Autowired
+    private FlowRepository flowRepository;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @Autowired
@@ -72,6 +81,140 @@ class IntegrationTest {
         Path db = Path.of("target", "it-" + System.nanoTime() + ".db").toAbsolutePath();
         registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + db);
         registry.add("tonglink.scheduler.interval-ms", () -> "3600000");
+        // 测试里禁用自动对齐，避免种子流程注册 timer 干扰用例；手动调用 alignTimers/fire 驱动。
+        registry.add("tonglink.scheduler.enabled", () -> "false");
+        registry.add("tonglink.scheduler.timer-threads", () -> "2");
+    }
+
+    /** 插入一条已发布的定时流程，返回其图 JSON。 */
+    private String insertScheduledFlow(String id, String nextRun) {
+        String graph = """
+                {
+                  "schemaVersion": 1,
+                  "settings": {},
+                  "nodes": [
+                    {"id":"trig","type":"trigger","subtype":"schedule","nodeVersion":"1","title":"定时",
+                     "position":{"x":60,"y":120},
+                     "config":{"mode":"minutes","everyMinutes":5,"enabled":"是","catchUp":"否"}},
+                    {"id":"n2","type":"code","subtype":"nodejs","nodeVersion":"1","title":"加工",
+                     "position":{"x":360,"y":120},
+                     "config":{"code":"return [{ok: true}]"},"config2":{}}
+                  ],
+                  "connections": [
+                    {"id":"e1","source":"trig","target":"n2","sourceHandle":"out","targetHandle":"in"}
+                  ]
+                }
+                """;
+        String now = LocalDateTime.now().withNano(0).toString();
+        jdbc.update("""
+                INSERT INTO flow_definition(id,project_id,name,description,status,graph_json,
+                                            published_graph_json,published_version,next_run,last_run,
+                                            records,success_rate,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, id, "P-001", "定时测试流程", "", "active", graph, graph, 1, nextRun,
+                "—", 0L, "100%", now, now);
+        return graph;
+    }
+
+    /** 精确 timer 在对齐间隔之外也能按计划时刻触发，不必等下一次 5 秒扫描。 */
+    @Test
+    void 精确timer在计划时刻触发() throws Exception {
+        String id = "FLOW-TIMER-TEST";
+        String next = LocalDateTime.now().withNano(0).plusSeconds(1).toString();
+        insertScheduledFlow(id, next);
+
+        scheduleService.alignTimers();
+        Thread.sleep(2000);
+
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM execution WHERE flow_id=? AND trigger_type='schedule'",
+                Integer.class, id);
+        assertThat(count).isEqualTo(1);
+        String advanced = jdbc.queryForObject(
+                "SELECT next_run FROM flow_definition WHERE id=?", String.class, id);
+        assertThat(advanced).isNotEqualTo(next);
+    }
+
+    /** 两个实例看到同一个 next_run 时，只有一个能认领并投递执行。 */
+    @Test
+    void 多实例条件认领只触发一次() throws Exception {
+        String id = "FLOW-CLAIM-TEST";
+        String next = LocalDateTime.now().withNano(0).plusMinutes(10).toString();
+        insertScheduledFlow(id, next);
+
+        ScheduleService second = new ScheduleService(flowRepository, executionService, 2,
+                3600000L, 60000L, false);
+        try {
+            scheduleService.fire(id, next);
+            second.fire(id, next);
+        } finally {
+            second.close();
+        }
+
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM execution WHERE flow_id=? AND trigger_type='schedule'",
+                Integer.class, id);
+        assertThat(count).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT next_run FROM flow_definition WHERE id=?", String.class, id))
+                .isNotEqualTo(next);
+    }
+
+    /** 执行结束刷新统计时不能把调度器已推进的 next_run 写回旧值。 */
+    @Test
+    void 统计更新不回退下次执行时间() throws Exception {
+        String id = "FLOW-STATS-TEST";
+        String next = LocalDateTime.now().withNano(0).plusMinutes(7).toString();
+        insertScheduledFlow(id, next);
+
+        flowRepository.updateFlowStats(id, LocalDateTime.now().withNano(0).toString(), 42L);
+
+        assertThat(jdbc.queryForObject(
+                "SELECT next_run FROM flow_definition WHERE id=?", String.class, id))
+                .isEqualTo(next);
+        assertThat(jdbc.queryForObject(
+                "SELECT records FROM flow_definition WHERE id=?", Long.class, id))
+                .isEqualTo(42L);
+    }
+
+    /**
+     * 历史遗留的 RUNNING 不能永久挡住定时触发；清理只处理超过阈值的记录。
+     */
+    @Test
+    void 过期RUNNING不阻塞调度且清理只处理过期记录() throws Exception {
+        String id = "FLOW-STALE-RUNNING-TEST";
+        insertScheduledFlow(id, LocalDateTime.now().withNano(0).plusMinutes(10).toString());
+
+        java.time.format.DateTimeFormatter fmt =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+        String oldStart = LocalDateTime.now().minusDays(2).format(fmt);
+        String freshStart = LocalDateTime.now().format(fmt);
+        String insert = """
+                INSERT INTO execution(id,flow_id,flow_version,trigger_type,status,start_time,end_time,
+                                      records,error_summary,idempotency_key)
+                VALUES(?,?,?,?,?,?,?,?,?,?)
+                """;
+        jdbc.update(insert, "EXEC-STALE-1", id, 1, "schedule", "RUNNING", oldStart, null, 0L, null, null);
+        jdbc.update(insert, "EXEC-FRESH-1", id, 1, "schedule", "RUNNING", freshStart, null, 0L, null, null);
+
+        // 有一条刚开始的 RUNNING 时仍然阻塞新周期
+        assertThat(executionService.hasRunning(id)).isTrue();
+
+        int cleaned = executionService.failStaleRunning();
+        assertThat(cleaned).isGreaterThanOrEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM execution WHERE id=?", String.class, "EXEC-STALE-1"))
+                .isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject(
+                "SELECT error_summary FROM execution WHERE id=?", String.class, "EXEC-STALE-1"))
+                .contains("卡死");
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM execution WHERE id=?", String.class, "EXEC-FRESH-1"))
+                .isEqualTo("RUNNING");
+
+        // 把新鲜那条也终结后，不应再有任何 RUNNING 阻塞该流程
+        jdbc.update("UPDATE execution SET status='SUCCESS' WHERE id=?", "EXEC-FRESH-1");
+        assertThat(executionService.hasRunning(id)).isFalse();
     }
 
     /** 连接池保活参数必须从 application.yml 正确绑定到 Hikari，否则 PG 空闲连接会被网络回收。 */
