@@ -18,6 +18,7 @@ import cn.tonglink.repository.FlowRepository;
 import cn.tonglink.scheduler.ScheduleService;
 import cn.tonglink.security.CryptoService;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.servlet.DispatcherType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import com.zaxxer.hikari.HikariDataSource;
@@ -1059,6 +1060,59 @@ class IntegrationTest {
             mvc.perform(post("/api/v1/ai/settings/reset")
                             .header("Authorization", "Bearer " + token));
         }
+    }
+
+    /**
+     * SSE（AI 流式问答）结束时容器发起的 ASYNC 二次分发不应被鉴权拦截。
+     *
+     * <p>修复前：SecurityConfig 只放行 FORWARD/ERROR，ASYNC 分发会落到
+     * anyRequest().authenticated()，而此时 SecurityContext 为空 → 抛
+     * AuthorizationDeniedException。这里不带令牌模拟该分发，断言放行；
+     * 同时断言普通 REQUEST 分发仍需令牌，确保鉴权未被削弱。</p>
+     */
+    @Test
+    void SSE异步分发不被授权过滤器拦截() throws Exception {
+        mvc.perform(post("/api/v1/ai/ask")
+                        .with(request -> {
+                            request.setDispatcherType(DispatcherType.ASYNC);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"你好\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/v1/ai/ask")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"你好\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** AI 诊断：失败节点展示画布名称，而不是 n1 这类节点编码。 */
+    @Test
+    void AI诊断失败节点显示名称而非编码() throws Exception {
+        String token = login();
+        mvc.perform(post("/api/v1/ai/settings/reset").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        String executionId = "EXEC-AI-DIAG-" + System.nanoTime();
+        jdbc.update("INSERT INTO execution(id,flow_id,status,start_time,error_summary) VALUES(?,?,?,?,?)",
+                executionId, "FLOW-AI-DIAG", "FAILED", "2026-01-01T00:00:00", "连接被拒绝");
+        jdbc.update("INSERT INTO execution_node(id,execution_id,node_id,node_title,node_type,"
+                        + "node_version,status,duration_ms,error_message,retry_count)"
+                        + " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "EN-AI-DIAG-" + System.nanoTime(), executionId, "n1", "采集温度", "source",
+                "1", "FAILED", 10L, "ECONNREFUSED 127.0.0.1:9000", 0);
+
+        MvcResult result = mvc.perform(post("/api/v1/ai/diagnose")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"executionId\":\"" + executionId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.source").value("local-rules"))
+                .andReturn();
+        JsonNode data = read(result).path("data");
+        assertThat(data.path("evidence").toString()).contains("采集温度").doesNotContain("n1");
+        assertThat(data.path("rootCause").asText()).doesNotContain("n1");
+        assertThat(data.path("steps").toString()).doesNotContain("n1");
     }
 
     /** 未配置大模型时，问答基于真实流程数据回答，不再使用写死的演示数字。 */

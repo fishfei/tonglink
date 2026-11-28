@@ -44,8 +44,12 @@ public class SecurityConfig {
                 .cors(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 内部路由转发（静态页面）不应被鉴权拦截
-                        .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR).permitAll()
+                        // 内部路由转发与 SSE 异步完成分发不应被重复鉴权：
+                        // ASYNC 分发是容器为结束已建立响应而做的二次分发，外部无法直接发起，
+                        // 真正的鉴权已在初始 REQUEST 完成。若不放行，SseEmitter.complete()
+                        // 触发的 ASYNC 分发会因 SecurityContext 为空而抛 AccessDeniedException。
+                        .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR,
+                                DispatcherType.ASYNC).permitAll()
                         .requestMatchers("/api/v1/auth/login", "/actuator/**", "/ws/**",
                                 "/", "/index.html", "/assets/**", "/favicon.ico",
                                 "/swagger-ui.html", "/swagger-ui/**", "/swagger-resources/**",

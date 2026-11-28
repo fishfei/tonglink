@@ -195,6 +195,9 @@ public class AiService {
                 .findFirst()
                 .orElse(null);
         String error = failed == null ? execution.errorSummary() : failed.errorMessage();
+        // 节点标题是画布上的名称（execution_node.node_title），n1/n2 只是节点编码。
+        // 诊断结果面向业务人员，一律优先展示节点名称，老记录没存名称时才回退编码。
+        String failedLabel = failed == null ? "" : nodeLabel(failed);
 
         // 配置了大模型时先用模型诊断；失败或解析不出结构则回退下面的本地规则。
         AiSettingsService.EffectiveConfig config = settings.effective();
@@ -203,19 +206,20 @@ public class AiService {
                 String prompt = "你是 IoT 数据采集平台的执行失败诊断专家。请根据以下执行信息"
                         + "给出诊断，只返回 JSON，格式为 {\"severity\":\"error|warning\","
                         + "\"rootCause\":\"一句话根因\",\"evidence\":[\"证据\"],\"steps\":[\"修复步骤\"]}。"
+                        + "\n引用节点时必须使用下面的节点名称，禁止使用 n1/n2 这类节点编码。"
                         + "\n执行ID：" + executionId
                         + "\n流程ID：" + execution.flowId()
                         + "\n执行状态：" + execution.status()
-                        + "\n失败节点：" + (failed == null ? "未定位" : failed.nodeId() + "（" + failed.nodeType() + "）")
+                        + "\n失败节点：" + (failed == null ? "未定位" : failedLabel + "（" + failed.nodeType() + "）")
                         + "\n错误信息：" + (error == null ? "无" : error);
                 String reply = callLlm(config, prompt);
                 Map<String, Object> parsed = JsonUtil.parse(extractJson(reply), Map.class);
                 if (parsed != null && parsed.get("rootCause") != null) {
                     Map<String, Object> result = new LinkedHashMap<>();
                     result.put("severity", parsed.getOrDefault("severity", "error"));
-                    result.put("rootCause", parsed.get("rootCause"));
-                    result.put("evidence", parsed.getOrDefault("evidence", List.of()));
-                    result.put("steps", parsed.getOrDefault("steps", List.of()));
+                    result.put("rootCause", replaceIdsWithNames(parsed.get("rootCause"), failed));
+                    result.put("evidence", replaceIdsWithNames(parsed.get("evidence"), failed));
+                    result.put("steps", replaceIdsWithNames(parsed.get("steps"), failed));
                     result.put("source", "llm");
                     result.put("provider", config.provider());
                     return result;
@@ -257,16 +261,49 @@ public class AiService {
         evidence.add("执行 ID：" + executionId);
         evidence.add(failed == null
                 ? "未定位到失败节点（可能在建执行前中断）"
-                : "失败节点：" + failed.nodeId() + "（" + failed.nodeType() + "）");
+                : "失败节点：" + failedLabel + "（" + failed.nodeType() + "）");
         evidence.add("错误摘要：" + (error == null ? "无" : error));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("severity", failed == null ? "warning" : "error");
-        result.put("rootCause", root);
+        result.put("rootCause", replaceIdsWithNames(root, failed));
         result.put("evidence", evidence);
-        result.put("steps", steps);
+        result.put("steps", replaceIdsWithNames(steps, failed));
         result.put("source", "local-rules");
         return result;
+    }
+
+    /** 节点展示名：画布上的 title 优先，老记录没有标题时退回编码，保证诊断文案可读。 */
+    private static String nodeLabel(ExecutionNode node) {
+        String title = node.nodeTitle();
+        return title == null || title.isBlank() ? node.nodeId() : title.trim();
+    }
+
+    /**
+     * 模型回话里可能仍带出 n1 这类节点编码，统一替换成节点名称。
+     * 支持字符串与字符串列表，rootCause / evidence / steps 都走这里兜底。
+     */
+    private static Object replaceIdsWithNames(Object value, ExecutionNode failed) {
+        if (failed == null || value == null) {
+            return value;
+        }
+        String id = failed.nodeId();
+        String label = nodeLabel(failed);
+        // 名称等于或本身就含编码时不替换，避免「n1采集温度」被二次拼成「n1采集温度采集温度」
+        if (id.equals(label) || label.contains(id)) {
+            return value;
+        }
+        if (value instanceof String s) {
+            return s.replace(id, label);
+        }
+        if (value instanceof List<?> list) {
+            List<String> result = new ArrayList<>();
+            for (Object item : list) {
+                result.add(item == null ? "" : String.valueOf(item).replace(id, label));
+            }
+            return result;
+        }
+        return value;
     }
 
     /**

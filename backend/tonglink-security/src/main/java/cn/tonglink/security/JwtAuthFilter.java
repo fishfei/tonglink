@@ -36,6 +36,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         this.jwtService = jwtService;
     }
 
+    /**
+     * 默认 {@code OncePerRequestFilter} 会跳过 ASYNC 分发，导致 SSE 结束时
+     * （SseEmitter.complete 触发的二次分发）SecurityContext 为空。这里让异步分发
+     * 也解析令牌，保证异步链路中的身份与初始请求一致。
+     */
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
