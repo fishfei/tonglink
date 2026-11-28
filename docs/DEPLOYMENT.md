@@ -63,6 +63,69 @@ docker compose -f docker/docker-compose.lite.yml up -d
 docker build -t tonglink-studio:0.1.0 -f docker/Dockerfile .
 ```
 
+### 3.1 用 docker run 直接启动（SQLite / PostgreSQL）
+
+不想用 Compose 时可直接 `docker run`。镜像已推送到华为云 SWR：`swr.cn-south-1.myhuaweicloud.com/fish/tonglink:0.1.0`，首次运行会自动拉取。镜像内置 `SPRING_PROFILES_ACTIVE=lite`、`TONGLINK_DB_PATH=/app/data/tonglink.db`，工作目录为 `/app`，因此把卷挂到 `/app/data` 即可持久化数据。
+
+**方式一：SQLite（lite，单容器）**
+
+```bash
+docker run -d --name tonglink-studio \
+  -p 8080:8080 \
+  -v tonglink-data:/app/data \
+  swr.cn-south-1.myhuaweicloud.com/fish/tonglink:0.1.0
+```
+
+不设环境变量时使用的是镜像内置的开发密钥。**生产环境务必追加密钥与时区**（否则 JWT 与数据源凭据沿用公开默认值）：
+
+```bash
+docker run -d --name tonglink-studio \
+  -p 8080:8080 \
+  -v tonglink-data:/app/data \
+  -e TONGLINK_JWT_SECRET='替换为你的JWT密钥（足够长）' \
+  -e TONGLINK_CRYPTO_KEY='替换为你的加密主密钥' \
+  -e TZ=Asia/Shanghai \
+  swr.cn-south-1.myhuaweicloud.com/fish/tonglink:0.1.0
+```
+
+打开 `http://服务器IP:8080` 即可访问。
+
+**方式二：PostgreSQL（standard，需额外数据库容器）**
+
+先建容器网络并启动 PostgreSQL（网络已存在时可跳过第一条）：
+
+```bash
+docker network create tonglink-net
+
+docker run -d --name tonglink-postgres \
+  --network tonglink-net \
+  -e POSTGRES_DB=tonglink \
+  -e POSTGRES_USER=tonglink \
+  -e POSTGRES_PASSWORD='替换为数据库密码' \
+  -v tonglink-pgdata:/var/lib/postgresql/data \
+  postgres:16-alpine
+```
+
+再启动应用，通过 `DB_URL` 指向 PostgreSQL——同一份 jar，驱动按 URL 前缀自动选择，无需重新打包：
+
+```bash
+docker run -d --name tonglink-studio \
+  --network tonglink-net \
+  -p 8080:8080 \
+  -v tonglink-data:/app/data \
+  -e SPRING_PROFILES_ACTIVE=standard \
+  -e DB_URL='jdbc:postgresql://tonglink-postgres:5432/tonglink?tcpKeepAlive=true&connectTimeout=5&socketTimeout=30' \
+  -e DB_USER=tonglink \
+  -e DB_PASSWORD='替换为数据库密码' \
+  -e DB_POOL_SIZE=20 \
+  -e TONGLINK_JWT_SECRET='替换为你的JWT密钥（足够长）' \
+  -e TONGLINK_CRYPTO_KEY='替换为你的加密主密钥' \
+  -e TZ=Asia/Shanghai \
+  swr.cn-south-1.myhuaweicloud.com/fish/tonglink:0.1.0
+```
+
+表结构由 `schema.sql` 在首次启动时自动创建，无需手工建表。若希望用 Compose 编排（含健康检查与依赖顺序），见第 5 节。
+
 ## 4. 轻量模式（1 个容器）
 
 一条命令启动，数据默认落在命名卷中：
