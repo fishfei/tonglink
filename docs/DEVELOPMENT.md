@@ -89,6 +89,5 @@ docker compose -f docker/docker-compose.lite.yml up -d
 | `TONGLINK_CRYPTO_KEY` | 开发用默认值 | 数据源密码字段 AES-GCM 主密钥，生产必须修改 |
 | `TONGLINK_JWT_SECRET` | 开发用默认值 | JWT 签名密钥，生产必须修改 |
 | `TONGLINK_QUEUE_TYPE` | `inmemory` | 切换 `redis` 进入队列模式 |
-| `TONGLINK_AI_PROVIDER` | `local` | AI 引擎；运行时优先用「AI 设置」页配置，未配置时回退这里与下面的 endpoint/key/model |
 | `TONGLINK_NODE_CMD` | `node` | Node 代码运行时命令 |
 | `TONGLINK_PYTHON_CMD` | `python3` | Python 代码运行时命令 |

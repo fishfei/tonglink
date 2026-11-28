@@ -47,7 +47,7 @@ public class AiSettingsController {
         return Result.ok(service.test(body));
     }
 
-    /** 清空设置，回退到环境变量 / 本地规则引擎。 */
+    /** 清空所有厂商设置，回退到本地规则引擎。 */
     @PostMapping("/settings/reset")
     public Result<Void> reset() {
         service.clear();

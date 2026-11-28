@@ -1,6 +1,9 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+/** 大模型生成长文本可能超过 30 秒；只有 AI 接口放宽，普通接口仍保持 30 秒。 */
+const AI_TIMEOUT = 180000
+
 /**
  * 统一请求封装：
  * - 自动携带 JWT
@@ -110,12 +113,109 @@ export const api = {
   dashboardFlowStats: () => request.get('/dashboard/flow-stats'),
 
   aiGenerate: (prompt: string, projectId: string) =>
-    request.post('/ai/generate-flow', { prompt, projectId }),
-  aiDiagnose: (executionId: string) => request.post('/ai/diagnose', { executionId }),
-  aiAsk: (question: string) => request.post('/ai/ask', { question }),
+    request.post('/ai/generate-flow', { prompt, projectId }, { timeout: AI_TIMEOUT }),
+  aiDiagnose: (executionId: string) =>
+    request.post('/ai/diagnose', { executionId }, { timeout: AI_TIMEOUT }),
+  aiAsk: (question: string) =>
+    request.post('/ai/ask', { question }, { timeout: AI_TIMEOUT }),
+
+  /**
+   * 流式问答：逐段回调模型输出，返回最后一帧的 meta（来源/厂商）。
+   *
+   * 结束判定以服务端下发的 `meta` 事件为准，而不死等 reader 的 done 信号：
+   * SseEmitter 有时不会及时送达流关闭信号，若最后一块 meta 又没带尾部空行，
+   * 它会一直滞留在 buffer 里，导致回答显示完了「正在思考」却不结束。
+   */
+  aiAskStream: async (question: string, onDelta: (chunk: string) => void): Promise<any> => {
+    const baseURL = import.meta.env.VITE_API_BASE || '/api/v1'
+    const token = localStorage.getItem('tls_token')
+    const controller = new AbortController()
+    // 兜底超时：即使服务端既不发 meta 也不关流，也要让前端结束 loading
+    const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT)
+    let response: Response
+    try {
+      response = await fetch(`${baseURL}/ai/ask/stream`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ question })
+      })
+    } catch (e: any) {
+      clearTimeout(timeoutId)
+      if (e?.name === 'AbortError') throw new Error('等待模型响应超时，请稍后重试')
+      throw e
+    }
+    if (response.status === 401) {
+      clearTimeout(timeoutId)
+      localStorage.removeItem('tls_token')
+      if (location.hash !== '#/login') location.hash = '#/login'
+      throw new Error('登录已过期，请重新登录')
+    }
+    if (!response.ok || !response.body) {
+      clearTimeout(timeoutId)
+      let message = `请求失败（HTTP ${response.status}）`
+      try {
+        const body: any = await response.json()
+        message = body.message || body.error || message
+      } catch { /* 非 JSON 错误体，保留默认提示 */ }
+      throw new Error(message)
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let meta: any = {}
+    let gotMeta = false
+
+    /** 解析一个 SSE 块；返回是否收到 meta。 */
+    const consume = (block: string): boolean => {
+      let event = 'message'
+      let data = ''
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        // SseEmitter 会把多行内容拆成多条 data 行，拼回时保留换行
+        else if (line.startsWith('data:')) data += (data ? '\n' : '') + line.slice(5).trim()
+      }
+      if (!data) return false
+      if (event === 'delta') {
+        onDelta(data)
+      } else if (event === 'meta') {
+        try { meta = JSON.parse(data) } catch { /* 忽略非法 meta */ }
+        return true
+      }
+      return false
+    }
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (value) {
+          buffer += decoder.decode(value, { stream: true })
+          const blocks = buffer.split('\n\n')
+          buffer = blocks.pop() || ''
+          for (const block of blocks) {
+            if (consume(block)) gotMeta = true
+          }
+        }
+        // 收到 meta 即完成；或服务流真正关闭
+        if (gotMeta || done) {
+          // 处理尾部没有空行结尾的残留块（常见于 meta 帧）
+          if (buffer.trim()) consume(buffer)
+          break
+        }
+      }
+    } finally {
+      clearTimeout(timeoutId)
+      // 主动取消流，避免服务端 SseEmitter 未及时 complete 时连接悬挂
+      try { reader.cancel() } catch { /* 流可能已关闭 */ }
+    }
+    return meta
+  },
 
   aiSettings: () => request.get('/ai/settings'),
   saveAiSettings: (data: any) => request.put('/ai/settings', data),
-  testAiSettings: (data: any) => request.post('/ai/settings/test', data),
+  testAiSettings: (data: any) => request.post('/ai/settings/test', data, { timeout: AI_TIMEOUT }),
   resetAiSettings: () => request.post('/ai/settings/reset')
 }

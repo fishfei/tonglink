@@ -15,44 +15,33 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
  * AI 设置：负责持久化、厂商预设、密钥掩码与「生效配置」解析。
  *
- * <p>生效优先级：数据库设置（provider≠local 且地址/Key 齐全）→ 环境变量
- * {@code tonglink.ai.*} → 本地规则引擎。这样既支持运行时改配置免重启，也保留
- * 只用环境变量部署的老方式；两者都没有时系统保持离线可用。</p>
+ * <p>每个厂商在表里独占一行（id 即 provider），接口地址、模型名、API Key 互不干扰；
+ * 另用一行 {@code __active__} 记录当前启用的引擎。模型连接信息只来自「设置 → AI 模型」页
+ * 保存的数据库配置；未配置（或启用本地规则引擎）时系统保持离线可用，不读取任何 AI 环境变量。</p>
  */
 @Service
 public class AiSettingsService {
 
     private static final Logger log = LoggerFactory.getLogger(AiSettingsService.class);
-    private static final String DEFAULT_ID = "default";
     /** 前端回显掩码时代表「不修改密钥」的占位符。 */
     static final String API_KEY_PLACEHOLDER = "******";
+    private static final String LOCAL = "local";
+    /** 与仓储保持一致，禁止前端把厂商名写成保留 id。 */
+    private static final String RESERVED_ID = "__active__";
 
     private final AiSettingsRepository repo;
     private final CryptoService crypto;
     private final LlmClient llmClient;
-    private final String envProvider;
-    private final String envEndpoint;
-    private final String envApiKey;
-    private final String envModel;
 
-    public AiSettingsService(AiSettingsRepository repo, CryptoService crypto, LlmClient llmClient,
-                             @Value("${tonglink.ai.provider:local}") String envProvider,
-                             @Value("${tonglink.ai.endpoint:}") String envEndpoint,
-                             @Value("${tonglink.ai.api-key:}") String envApiKey,
-                             @Value("${tonglink.ai.model:gpt-4o-mini}") String envModel) {
+    public AiSettingsService(AiSettingsRepository repo, CryptoService crypto, LlmClient llmClient) {
         this.repo = repo;
         this.crypto = crypto;
         this.llmClient = llmClient;
-        this.envProvider = envProvider;
-        this.envEndpoint = envEndpoint;
-        this.envApiKey = envApiKey;
-        this.envModel = envModel;
     }
 
     /**
@@ -61,93 +50,117 @@ public class AiSettingsService {
      * <p>每次调用都重新读库，保证保存后即时生效，无需重启应用。</p>
      */
     public EffectiveConfig effective() {
-        AiSettings saved = repo.settings();
-        if (saved != null && !"local".equalsIgnoreCase(saved.provider())
-                && notBlank(saved.endpoint()) && notBlank(saved.apiKeyCipher())) {
-            return new EffectiveConfig(true, saved.provider(), saved.endpoint(),
+        String provider = repo.activeProvider();
+        if (LOCAL.equalsIgnoreCase(provider)) {
+            return localConfig();
+        }
+        AiSettings saved = repo.settings(provider);
+        if (saved != null && notBlank(saved.endpoint()) && notBlank(saved.apiKeyCipher())) {
+            return new EffectiveConfig(true, provider, saved.endpoint(),
                     crypto.decrypt(saved.apiKeyCipher()), saved.model(), "settings");
         }
-        if (!"local".equalsIgnoreCase(envProvider) && notBlank(envEndpoint)) {
-            return new EffectiveConfig(true, envProvider, envEndpoint, envApiKey, envModel, "environment");
-        }
-        return new EffectiveConfig(false, "local", "", "", "", "local");
+        return localConfig();
     }
 
-    /** 设置页视图：密钥以掩码返回，附带厂商预设与当前生效来源。 */
-    public Map<String, Object> view() {
-        AiSettings saved = repo.settings();
-        EffectiveConfig active = effective();
-        String provider = saved == null ? "local" : saved.provider();
-        String endpoint = saved == null ? "" : nullToEmpty(saved.endpoint());
-        String model = saved == null ? "" : nullToEmpty(saved.model());
+    private EffectiveConfig localConfig() {
+        return new EffectiveConfig(false, LOCAL, "", "", "", "local");
+    }
 
-        // 未保存过设置但环境变量里配了模型时，回显环境变量，避免用户误以为没配置
-        if (saved == null && active.enabled()) {
-            provider = active.provider();
-            endpoint = active.endpoint();
-            model = active.model() == null ? "" : active.model();
+    /**
+     * 设置页视图：返回每个厂商各自的配置（密钥只回显掩码）、预设与当前生效来源。
+     *
+     * <p>顶层仍保留当前生效厂商的 provider/endpoint/model/apiKeyMask，方便只看「当前生效」
+     * 的调用方；各厂商的完整列表在 {@code configs} 里，切换厂商时前端据此回显各自的密钥。</p>
+     */
+    public Map<String, Object> view() {
+        EffectiveConfig active = effective();
+
+        Map<String, Object> configs = new LinkedHashMap<>();
+        for (AiSettings saved : repo.allSettings()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("endpoint", nullToEmpty(saved.endpoint()));
+            item.put("model", nullToEmpty(saved.model()));
+            item.put("apiKeyMask", apiKeyMask(saved));
+            item.put("hasApiKey", notBlank(saved.apiKeyCipher()));
+            configs.put(saved.id(), item);
         }
-        String keyMask = ApiSettingsKeyMask(saved, active);
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("provider", provider);
-        result.put("endpoint", endpoint);
-        result.put("model", model);
-        result.put("apiKeyMask", keyMask);
-        boolean savedKey = saved != null && notBlank(saved.apiKeyCipher());
-        result.put("hasApiKey", !"local".equalsIgnoreCase(provider) && (savedKey || active.enabled()));
+        result.put("provider", active.provider());
+        result.put("endpoint", active.endpoint());
+        result.put("model", active.model());
+        result.put("apiKeyMask", active.enabled() ? CryptoService.mask(active.apiKey()) : "—");
+        result.put("hasApiKey", active.enabled());
         result.put("active", active.enabled());
         result.put("activeProvider", active.provider());
         result.put("activeSource", active.source());
+        result.put("activeLabel", activeLabel(active.provider()));
+        result.put("configs", configs);
         result.put("presets", presets());
         return result;
     }
 
-    /** 计算 API Key 掩码。掩码只用于展示，不代表明文。 */
-    private String ApiSettingsKeyMask(AiSettings saved, EffectiveConfig active) {
-        String cipher = saved == null ? null : saved.apiKeyCipher();
-        if (notBlank(cipher)) {
-            return CryptoService.mask(crypto.decrypt(cipher));
+    /** 厂商中文名，配置缺失时回退到标识本身。 */
+    private String activeLabel(String provider) {
+        for (Map<String, Object> preset : presets()) {
+            if (provider.equals(preset.get("key"))) {
+                return String.valueOf(preset.get("label"));
+            }
         }
-        if (active.enabled() && notBlank(active.apiKey())) {
-            return CryptoService.mask(active.apiKey());
-        }
-        return "—";
+        return provider;
     }
 
-    /** 保存设置。apiKey 为空或掩码占位符时保留原密钥（不清除已有配置）。 */
+    /** 计算 API Key 掩码。掩码只用于展示，不代表明文。 */
+    private String apiKeyMask(AiSettings saved) {
+        String cipher = saved == null ? null : saved.apiKeyCipher();
+        return notBlank(cipher) ? CryptoService.mask(crypto.decrypt(cipher)) : "—";
+    }
+
+    /**
+     * 保存某个厂商的设置并把它设为当前生效引擎。
+     *
+     * <p>apiKey 为空或掩码占位符时保留「该厂商」原密钥，绝不拿别的厂商的 Key 来补。</p>
+     */
     public void save(Map<String, Object> body) {
-        String provider = str(body.get("provider"));
+        String provider = str(body.get("provider")).trim();
         if (provider.isBlank()) {
-            provider = "local";
+            provider = LOCAL;
         }
+        if (RESERVED_ID.equals(provider)) {
+            throw new ApiException(Codes.VALIDATION, "引擎标识非法");
+        }
+        if (LOCAL.equalsIgnoreCase(provider)) {
+            repo.setActiveProvider(LOCAL);
+            log.info("AI 引擎已切换为本地规则引擎");
+            return;
+        }
+
         String endpoint = str(body.get("endpoint")).trim();
         String model = str(body.get("model")).trim();
         String apiKey = str(body.get("apiKey")).trim();
-
-        AiSettings old = repo.settings();
-        if (!"local".equalsIgnoreCase(provider) && endpoint.isBlank()) {
+        if (endpoint.isBlank()) {
             throw new ApiException(Codes.VALIDATION, "请选择模型厂商并填写接口地址");
         }
+
+        AiSettings old = repo.settings(provider);
         if (API_KEY_PLACEHOLDER.equals(apiKey) || apiKey.isEmpty()) {
-            // 保留原密钥（新配置且未提供 Key 时为空，连接测试会明确失败）
             apiKey = old == null || old.apiKeyCipher() == null ? "" : crypto.decrypt(old.apiKeyCipher());
         }
-        String cipher = crypto.encrypt(apiKey);
-        repo.save(new AiSettings(DEFAULT_ID, provider, endpoint, cipher, model, ""));
+        repo.save(new AiSettings(provider, provider, endpoint, crypto.encrypt(apiKey), model, ""));
+        repo.setActiveProvider(provider);
         log.info("AI 设置已保存：provider={}, endpoint={}, model={}", provider, endpoint, model);
     }
 
-    /** 恢复为未配置：删除设置行，回退到环境变量或本地规则引擎。 */
+    /** 恢复为未配置：清空所有厂商配置及生效标记，回退到本地规则引擎。 */
     public void clear() {
-        repo.clear();
-        log.info("AI 设置已清空，回退到环境变量 / 本地规则引擎");
+        repo.clearAll();
+        log.info("AI 设置已清空，回退到本地规则引擎");
     }
 
     /** 用请求里的临时参数做连接测试，不修改已保存设置。 */
     public Map<String, Object> test(Map<String, Object> body) {
-        String provider = str(body.get("provider"));
-        if ("local".equalsIgnoreCase(provider)) {
+        String provider = str(body.get("provider")).trim();
+        if (LOCAL.equalsIgnoreCase(provider)) {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("message", "本地规则引擎无需连接外部服务");
@@ -157,36 +170,51 @@ public class AiSettingsService {
         String model = str(body.get("model")).trim();
         String apiKey = str(body.get("apiKey")).trim();
         if (API_KEY_PLACEHOLDER.equals(apiKey) || apiKey.isEmpty()) {
-            AiSettings old = repo.settings();
+            AiSettings old = repo.settings(provider);
             apiKey = old == null || old.apiKeyCipher() == null ? "" : crypto.decrypt(old.apiKeyCipher());
         }
         return llmClient.test(endpoint, apiKey, model);
     }
 
-    /** 四家国内主流厂商的 OpenAI 兼容预设，前端选择后自动填充地址与模型名。 */
+    /** 四家国内主流厂商的 OpenAI 兼容预设：内置地址、默认模型、常用模型列表与官方文档入口。 */
     public List<Map<String, Object>> presets() {
         List<Map<String, Object>> list = new ArrayList<>();
-        list.add(preset("local", "本地规则引擎", "", "", "离线可用，无需 API Key"));
+        list.add(preset("local", "本地规则引擎", "", "", "", List.of(), ""));
         list.add(preset("deepseek", "DeepSeek", "https://api.deepseek.com/v1/chat/completions",
-                "deepseek-chat", "deepseek-chat / deepseek-reasoner"));
+                "deepseek-chat",
+                "常用模型，完整列表与下线公告以官方文档为准",
+                List.of("deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"),
+                "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"));
         list.add(preset("zhipu", "智谱 GLM", "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-                "glm-4-flash", "glm-4-flash / glm-4-plus / glm-4.5"));
+                "glm-4-flash",
+                "免费模型 glm-4-flash 可直接体验，新模型请查看官方文档",
+                List.of("glm-4-flash", "glm-4-plus", "glm-4.5-air", "glm-4.7", "glm-5.3"),
+                "https://docs.bigmodel.cn/cn/guide/start/model-overview"));
         list.add(preset("qwen", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-                "qwen-plus", "qwen-plus / qwen-turbo / qwen-max"));
+                "qwen-plus",
+                "百炼 OpenAI 兼容模式，完整模型列表以官方文档为准",
+                List.of("qwen-plus", "qwen-flash", "qwen-max", "qwen3.7-plus", "qwen3.8-max"),
+                "https://help.aliyun.com/zh/model-studio/getting-started/models"));
         list.add(preset("hunyuan", "腾讯混元", "https://api.hunyuan.cloud.tencent.com/v1/chat/completions",
-                "hunyuan-turbo", "hunyuan-turbo / hunyuan-standard"));
-        list.add(preset("custom", "自定义（OpenAI 兼容）", "", "", "填写任意兼容 Chat Completions 的接口"));
+                "hunyuan-turbo",
+                "混元 OpenAI 兼容接口，模型编码请按官方文档填写",
+                List.of("hunyuan-turbo", "hunyuan-standard", "hunyuan-turbos-latest", "hy4", "hy3"),
+                "https://cloud.tencent.com/document/product/1823/130051"));
+        list.add(preset("custom", "自定义（OpenAI 兼容）", "", "",
+                "填写任意兼容 Chat Completions 的接口，模型名由服务商决定", List.of(), ""));
         return list;
     }
 
     private Map<String, Object> preset(String key, String label, String endpoint,
-                                       String model, String hint) {
+                                       String model, String hint, List<String> models, String docsUrl) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("key", key);
         map.put("label", label);
         map.put("endpoint", endpoint);
         map.put("model", model);
         map.put("hint", hint);
+        map.put("models", models);
+        map.put("docsUrl", docsUrl);
         return map;
     }
 

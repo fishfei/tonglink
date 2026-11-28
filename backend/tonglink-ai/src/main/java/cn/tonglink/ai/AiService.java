@@ -8,14 +8,21 @@ import cn.tonglink.common.IdUtil;
 import cn.tonglink.common.JsonUtil;
 import cn.tonglink.model.entity.Execution;
 import cn.tonglink.model.entity.ExecutionNode;
+import cn.tonglink.model.entity.Flow;
 import cn.tonglink.model.flow.FlowGraph;
 import cn.tonglink.model.flow.GraphEdge;
 import cn.tonglink.model.flow.GraphNode;
+import cn.tonglink.model.flow.NodeDefinition;
+import cn.tonglink.node.NodeRegistry;
 import cn.tonglink.repository.ExecutionRepository;
+import cn.tonglink.repository.FlowRepository;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -25,9 +32,12 @@ import org.springframework.stereotype.Service;
 /**
  * AI 能力：自然语言生成流程、执行失败诊断、数据异常问答。
  *
- * <p>默认使用本地规则引擎（零依赖、离线可用、响应稳定）。在「AI 设置」页保存
- * 大模型连接信息（或通过 {@code TONGLINK_AI_*} 环境变量）后，生成流程、失败诊断与
- * 问答改用 OpenAI 兼容模型；未配置或调用失败时自动回退本地规则引擎。</p>
+ * <p>默认使用本地规则引擎（零依赖、离线可用、响应稳定）。在「设置 → AI 模型」页保存
+ * 大模型连接信息后，生成流程、失败诊断与问答改用 OpenAI 兼容模型；未配置或调用失败时
+ * 自动回退本地规则引擎。模型连接信息只来自设置页，不读取环境变量。</p>
+ *
+ * <p>问答无论走模型还是规则引擎，都会先读取平台真实的流程与执行记录作为上下文，
+ * 因此「当前采集任务运行情况如何」这类问题能被具体回答，而不是空泛推脱。</p>
  *
  * <p>规则引擎不是「假装 AI」：它按关键词识别意图、按平台真实的节点契约产出
  * 可校验、可落库的流程 JSON，因此即使用户没有配置任何模型也能完成闭环。</p>
@@ -60,13 +70,18 @@ public class AiService {
     private static final Pattern TABLE_NAME = Pattern.compile("([a-z_][a-z0-9_]{2,30})\\s*(?:表|table)");
 
     private final ExecutionRepository executions;
+    private final FlowRepository flows;
     private final AiSettingsService settings;
     private final LlmClient llmClient;
+    private final NodeRegistry nodeRegistry;
 
-    public AiService(ExecutionRepository executions, AiSettingsService settings, LlmClient llmClient) {
+    public AiService(ExecutionRepository executions, FlowRepository flows,
+                     AiSettingsService settings, LlmClient llmClient, NodeRegistry nodeRegistry) {
         this.executions = executions;
+        this.flows = flows;
         this.settings = settings;
         this.llmClient = llmClient;
+        this.nodeRegistry = nodeRegistry;
     }
 
     /**
@@ -80,19 +95,23 @@ public class AiService {
         AiSettingsService.EffectiveConfig config = settings.effective();
         if (config.enabled()) {
             try {
-                String reply = callLlm(config, "你是 IoT 数据采集平台的流程生成器。根据用户描述生成 TongLink Studio 流程 JSON，"
-                        + "只返回 JSON，不要解释。节点 type 取值 trigger/source/code/logic/output。用户描述：" + prompt);
+                String system = flowSystemPrompt();
+                String reply = callLlm(config, system, "用户描述：" + prompt);
                 Map<String, Object> parsed = JsonUtil.parse(extractJson(reply), Map.class);
                 if (parsed != null && parsed.get("nodes") != null) {
+                    // 模型输出只当作"意图草稿"：subtype 可能不存在、连线可能缺失或端点对不上，
+                    // 必须规范化成平台真实节点并按顺序串联，否则会出现节点双击提示不存在、无连线。
+                    FlowGraph graph = normalizeGraph(parsed, prompt, projectId);
                     Map<String, Object> result = new LinkedHashMap<>();
-                    result.put("flow", parsed);
+                    result.put("flow", graph);
                     result.put("source", "llm");
                     result.put("provider", config.provider());
-                    result.put("explanation", "由大模型（" + config.provider() + "）生成，请确认节点配置后保存。");
+                    result.put("explanation", "由大模型（" + config.provider()
+                            + "）生成，已按平台节点类型校正并补齐连线，请确认节点配置后保存。");
                     return result;
                 }
             } catch (Exception e) {
-                log.warn("LLM 生成失败，回退到本地规则引擎：{}", e.getMessage());
+                log.warn("LLM 生成失败，回退到本地规则引擎：{}", e.getMessage(), e);
             }
         }
 
@@ -140,6 +159,10 @@ public class AiService {
         }
 
         String name = flowName(prompt, source, outputs.get(0));
+        // 用户用英文描述时兜底成中文名称，保证生成的流程名与节点名在中文界面里可读
+        if (!hasChinese(name)) {
+            name = (source == null ? "数据" : source.title()) + " → " + outputs.get(0).title();
+        }
         String explanation = String.join("，", brief) + "。请按实际数据源、表名、阈值与凭据核对后再保存。";
 
         String flowId = IdUtil.prefix("FLOW");
@@ -253,10 +276,12 @@ public class AiService {
      * @return {@code {answer, source}}
      */
     public Map<String, Object> ask(String question) {
+        RuntimeContext context = buildContext();
         AiSettingsService.EffectiveConfig config = settings.effective();
         if (config.enabled()) {
             try {
-                String reply = callLlm(config, question);
+                String reply = llmClient.chat(config.endpoint(), config.apiKey(), config.model(),
+                        assistantPrompt(context), question == null ? "" : question);
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("answer", reply);
                 result.put("source", "llm");
@@ -266,27 +291,132 @@ public class AiService {
                 log.warn("LLM 问答失败，回退到本地规则：{}", e.getMessage());
             }
         }
+        return Map.of("answer", localAnswer(question, context), "source", "local-rules");
+    }
 
-        String text = question == null ? "" : question.toLowerCase();
-        String answer;
-        if (text.contains("异常") || text.contains("温度") || text.contains("高温")) {
-            answer = "最近 24 小时检测到 3 个温度异常点，集中在 14:20、15:05 和 16:40。"
-                    + "其中 15:05 的 PT101 温度达到 92.4℃，超过阈值 85℃。"
-                    + "建议检查冷却阀状态，并确认 OPC UA 点位的质量戳是否为 GOOD。";
-        } else if (text.contains("失败") || text.contains("错误") || text.contains("报错")) {
-            answer = "执行失败主要集中在两类：数据源连接超时，以及 Python 代码节点的类型转换异常。"
-                    + "可在执行日志页选中失败记录，点击「AI 诊断」查看根因与修复步骤。";
-        } else if (text.contains("流程") || text.contains("采集") || text.contains("运行")) {
-            answer = "当前多个流程处于运行状态，采集量最高的是「车间温度实时采集」。"
-                    + "可在数据看板查看各流程的采集条数、成功率与下次执行时间。";
-        } else {
-            answer = "我可以回答数据采集异常、流程执行情况与失败诊断相关问题。"
-                    + "例如：「最近有哪些温度异常？」或「为什么流程执行失败？」";
+    /**
+     * 流式问答：模型每产出一段就回调 {@code onDelta}，前端可逐段渲染。
+     *
+     * <p>模型不可用或流中途失败时追加一段本地规则回答，保证用户始终拿得到结果。
+     * 返回的 map 描述实际来源，供前端展示标签。</p>
+     */
+    public Map<String, Object> askStream(String question, Consumer<String> onDelta) {
+        RuntimeContext context = buildContext();
+        AiSettingsService.EffectiveConfig config = settings.effective();
+        if (config.enabled()) {
+            try {
+                llmClient.stream(config.endpoint(), config.apiKey(), config.model(),
+                        assistantPrompt(context), question == null ? "" : question, onDelta);
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("source", "llm");
+                result.put("provider", config.provider());
+                return result;
+            } catch (Exception e) {
+                log.warn("LLM 流式问答失败，回退到本地规则：{}", e.getMessage());
+                onDelta.accept("\n\n[模型调用失败：" + safeMessage(e) + "，以下由本地规则回答]\n\n");
+            }
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("answer", answer);
-        result.put("source", "local-rules");
-        return result;
+        onDelta.accept(localAnswer(question, context));
+        return Map.of("source", "local-rules");
+    }
+
+    /** 平台问答的系统提示词：明确告知模型它已拿到实时数据，禁止推脱或编造。 */
+    private String assistantPrompt(RuntimeContext context) {
+        return "你是 TongLink Studio（IT/OT 数据采集与编排平台）的内置助手。"
+                + "下面【平台运行数据】是系统实时读取的数据库快照，你可以且只能依据它回答。"
+                + "严禁回答「没有连接权限」「无法访问实时数据」「我没有监控系统」这类推脱话术；"
+                + "若数据中没有相关信息，就明确说当前数据中未找到，不要编造具体数值。"
+                + "回答用中文，先给结论再给数字，必要时给出下一步建议，控制在 300 字以内。\n"
+                + "【平台运行数据】\n" + context.overview() + "\n" + String.join("\n", context.recent());
+    }
+
+    /** 本地规则引擎：基于真实上下文回答，不再使用写死的演示数据。 */
+    private String localAnswer(String question, RuntimeContext context) {
+        String text = question == null ? "" : question.toLowerCase();
+        StringBuilder answer = new StringBuilder();
+        if (has(text, "失败", "错误", "报错", "诊断")) {
+            if (context.failed() == 0) {
+                answer.append("最近 ").append(context.recent().size()).append(" 次执行中没有失败记录。");
+            } else {
+                answer.append("最近 ").append(context.recent().size()).append(" 次执行中有 ")
+                        .append(context.failed()).append(" 次失败或超时：\n");
+                context.recent().stream().filter(l -> l.contains("FAILED") || l.contains("TIMEOUT"))
+                        .limit(5).forEach(l -> answer.append("- ").append(l).append("\n"));
+                answer.append("可在执行日志页选中记录点击「AI 诊断」查看根因。");
+            }
+        } else if (has(text, "异常", "温度", "高温")) {
+            List<String> temperature = context.recent().stream()
+                    .filter(l -> has(l.toLowerCase(), "温度", "temperature", "异常"))
+                    .limit(5).toList();
+            if (temperature.isEmpty()) {
+                answer.append("最近 ").append(context.recent().size()).append(" 次执行记录中未发现温度异常相关记录。");
+            } else {
+                answer.append("最近执行记录中与温度/异常相关的内容：\n");
+                temperature.forEach(l -> answer.append("- ").append(l).append("\n"));
+            }
+        } else if (has(text, "流程", "采集", "运行", "任务", "情况", "状态")) {
+            answer.append(context.overview()).append("\n");
+            context.recent().stream().limit(5).forEach(l -> answer.append("- ").append(l).append("\n"));
+            answer.append("完整数据请查看数据看板与执行日志页。");
+        } else {
+            answer.append("我可以基于平台真实数据回答流程运行、采集任务、失败诊断与异常问题。\n")
+                    .append(context.overview());
+        }
+        return answer.toString();
+    }
+
+    /** 从流程与执行表组装问答上下文，避免模型凭空回答。 */
+    private RuntimeContext buildContext() {
+        List<Flow> all = flows.flows();
+        List<Execution> recent = executions.executions(null, null, 20);
+        long active = all.stream().filter(f -> "active".equalsIgnoreCase(f.status())).count();
+        long success = recent.stream().filter(e -> "SUCCESS".equals(e.status())).count();
+        String rate = recent.isEmpty() ? "无执行记录" : String.format("%.1f%%", success * 100.0 / recent.size());
+        long failed = recent.stream().filter(e -> "FAILED".equals(e.status()) || "TIMEOUT".equals(e.status())).count();
+        long records = all.stream().mapToLong(Flow::records).sum();
+
+        Map<String, String> names = new LinkedHashMap<>();
+        for (Flow f : all) {
+            names.put(f.id(), f.name());
+        }
+        List<String> lines = new ArrayList<>();
+        for (Execution e : recent) {
+            String line = "[" + e.startTime() + "] " + names.getOrDefault(e.flowId(), e.flowId())
+                    + " " + e.status() + "，采集 " + e.records() + " 条";
+            if (e.errorSummary() != null && !e.errorSummary().isBlank()) {
+                line += "，错误：" + clip(e.errorSummary(), 120);
+            }
+            lines.add(line);
+        }
+        List<String> nextRuns = all.stream()
+                .filter(f -> f.nextRun() != null && !f.nextRun().isBlank() && !"—".equals(f.nextRun()))
+                .sorted((a, b) -> a.nextRun().compareTo(b.nextRun()))
+                .limit(5)
+                .map(f -> f.name() + " 下次 " + f.nextRun())
+                .toList();
+        List<String> topFlows = all.stream()
+                .sorted((a, b) -> Long.compare(b.records(), a.records()))
+                .limit(5)
+                .map(f -> f.name() + "（" + f.records() + " 条）")
+                .toList();
+
+        String overview = "流程总数 " + all.size() + "，启用 " + active + "，累计采集 " + records
+                + " 条；最近 " + recent.size() + " 次执行成功率 " + rate + "，失败/超时 " + failed + " 次。"
+                + (topFlows.isEmpty() ? "" : " 采集量前 5 的流程：" + String.join("、", topFlows) + "。")
+                + (nextRuns.isEmpty() ? "" : " 即将执行：" + String.join("；", nextRuns) + "。");
+        return new RuntimeContext(overview, lines, failed);
+    }
+
+    private record RuntimeContext(String overview, List<String> recent, long failed) {
+    }
+
+    private static String clip(String text, int max) {
+        return text.length() > max ? text.substring(0, max) + "…" : text;
+    }
+
+    private static String safeMessage(Exception e) {
+        String message = e.getMessage();
+        return message == null || message.isBlank() ? e.toString() : clip(message, 200);
     }
 
     // ---------------- 内部工具 ----------------
@@ -294,6 +424,11 @@ public class AiService {
     /** 用当前生效配置调用 OpenAI 兼容接口，返回首个 choice 的文本。 */
     private String callLlm(AiSettingsService.EffectiveConfig config, String prompt) {
         return llmClient.chat(config.endpoint(), config.apiKey(), config.model(), prompt);
+    }
+
+    /** 带系统提示词的模型调用，用于要求固定输出结构的场景。 */
+    private String callLlm(AiSettingsService.EffectiveConfig config, String system, String prompt) {
+        return llmClient.chat(config.endpoint(), config.apiKey(), config.model(), system, prompt);
     }
 
     /** 从模型回复中截取 JSON 片段，兼容 ```json 代码块包裹的情况。 */
@@ -304,6 +439,245 @@ public class AiService {
         int start = text.indexOf('{');
         int end = text.lastIndexOf('}');
         return start >= 0 && end > start ? text.substring(start, end + 1) : text;
+    }
+
+    /**
+     * 生成流程的系统提示词：把平台真实可用的节点类型列给模型，从源头减少幻觉。
+     * 强制要求连线，并说明所有子节点必须来自白名单，避免生成 email/weather 之类不存在的节点。
+     */
+    private String flowSystemPrompt() {
+        Map<String, List<String>> byType = new LinkedHashMap<>();
+        for (NodeDefinition def : nodeRegistry.definitions()) {
+            byType.computeIfAbsent(def.type(), k -> new ArrayList<>()).add(def.subtype());
+        }
+        StringBuilder allowed = new StringBuilder();
+        byType.forEach((type, subs) -> allowed.append(type).append(':')
+                .append(String.join("/", subs)).append("；"));
+        StringBuilder titles = new StringBuilder();
+        for (NodeDefinition def : nodeRegistry.definitions()) {
+            titles.append(def.type()).append(':').append(def.subtype())
+                    .append('=').append(def.title()).append('；');
+        }
+        return "你是 IoT 数据采集平台的流程生成器。根据用户描述生成 TongLink Studio 流程 JSON，"
+                + "只返回 JSON、不要解释。顶层结构 {\"id\",\"name\",\"projectId\",\"nodes\",\"connections\"}。"
+                + "每个节点含 id/type/subtype/title/position{x,y}/config。"
+                + "节点的 type 只能是 trigger/source/code/logic/output 之一，subtype 必须取自这个白名单："
+                + allowed + "\n"
+                + "顶层 name 和每个节点的 title 必须使用中文，禁止把英文 subtype 当作展示名。"
+                + "节点 title 优先使用这个中文名对照：" + titles + "\n"
+                + "流程 name 用一句简短中文概括用户描述，例如「每天8点采集温度并邮件告警」。\n"
+                + "严禁使用白名单之外的 subtype（例如 email、weather、send_mail 都不存在；"
+                + "发邮件请用 type=output,subtype=alert 并在 config.channel 写「邮件」；"
+                + "查天气/调用外部接口请用 type=source,subtype=http）。"
+                + "connections 是数组，每条形如 {\"id\",\"source\",\"target\",\"sourceHandle\",\"targetHandle\"}，"
+                + "source/target 必须是某个节点的 id，按执行顺序把节点全部串起来；"
+                + "条件节点 logic:condition 用 sourceHandle=true 接下游。不要输出孤立节点。";
+    }
+
+    /**
+     * 把模型返回的松散 JSON 规范化成平台可直接渲染、可落库的标准流程图。
+     *
+     * <p>模型经常生成不存在的 subtype（email/weather）、缺失连线、连线端点引用不存在的
+     * 节点，直接透传给前端会导致双击提示「节点不存在」、画布没有连线。这里做三件事：
+     * 1) subtype 不在注册表时按关键词别名或同类默认节点纠正；2) 重新分配规范 id 与坐标；
+     * 3) 丢弃模型给的连线，按节点顺序重新串联，保证每条边端点都是真实存在的节点。</p>
+     */
+    private FlowGraph normalizeGraph(Map<String, Object> parsed, String prompt, String projectId) {
+        Set<String> known = new HashSet<>();
+        for (NodeDefinition def : nodeRegistry.definitions()) {
+            known.add(def.type() + ":" + def.subtype());
+        }
+
+        Object rawNodes = parsed.get("nodes");
+        List<GraphNode> nodes = new ArrayList<>();
+        if (rawNodes instanceof List<?> list) {
+            int index = 0;
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> raw)) {
+                    continue;
+                }
+                String type = lower(str(raw.get("type")));
+                String subtype = lower(str(raw.get("subtype")));
+                String[] fixed = resolveNodeType(type, subtype, known);
+                type = fixed[0];
+                subtype = fixed[1];
+
+                Map<String, Object> config = raw.get("config") instanceof Map<?, ?> c
+                        ? stringMap(c) : new LinkedHashMap<>();
+                // 发邮件类意图统一落到 alert 节点的 channel=邮件，避免模型自造 email 节点
+                if ("alert".equals(subtype) && mentionsMail(subtype + " " + str(raw.get("title")))) {
+                    config.put("channel", "邮件");
+                }
+                String title = str(raw.get("title"));
+                // 模型常把 subtype 英文标识直接当标题（如 schedule、http），统一换成中文展示名
+                if (title.isBlank() || !hasChinese(title)) {
+                    title = defaultTitle(type, subtype);
+                }
+                Map<String, Object> position = new LinkedHashMap<>();
+                if (raw.get("position") instanceof Map<?, ?> p) {
+                    position.put("x", number(p.get("x"), X_START + index * X_STEP));
+                    position.put("y", number(p.get("y"), DEFAULT_Y));
+                } else {
+                    position.put("x", X_START + index * X_STEP);
+                    position.put("y", DEFAULT_Y);
+                }
+                nodes.add(new GraphNode("n" + index, type, subtype, "1", title, position, config));
+                index++;
+            }
+        }
+
+        // 没有任何可用节点时不生成空流程，交回调用方回退本地规则引擎
+        if (nodes.isEmpty()) {
+            throw new IllegalStateException("模型未返回可用节点");
+        }
+
+        // 按顺序重新串联，条件节点走 true 分支；丢弃模型给的对不上端点的连线
+        List<GraphEdge> edges = new ArrayList<>();
+        for (int i = 1; i < nodes.size(); i++) {
+            GraphNode from = nodes.get(i - 1);
+            String handle = "condition".equals(from.subtype()) ? "true" : "out";
+            edges.add(new GraphEdge("e" + (i - 1), from.id(), nodes.get(i).id(), handle, "in"));
+        }
+
+        String name = str(parsed.get("name"));
+        if (!hasChinese(name)) {
+            name = flowName(prompt, null, null);
+        }
+        if (!hasChinese(name)) {
+            name = "自动生成的数据采集流程";
+        }
+        String id = str(parsed.get("id"));
+        if (!id.startsWith("FLOW-")) {
+            id = IdUtil.prefix("FLOW");
+        }
+        return new FlowGraph(1, id, name,
+                projectId == null || projectId.isBlank() ? "P-001" : projectId,
+                Map.of("overlapPolicy", "SKIP"), nodes, edges);
+    }
+
+    /** 纠正模型给的 type/subtype 到注册表里的合法组合。 */
+    private String[] resolveNodeType(String type, String subtype, Set<String> known) {
+        String raw = type + ":" + subtype;
+        if (known.contains(raw)) {
+            return new String[]{type, subtype};
+        }
+        // 关键词别名：模型常用自然语言 subtype，映射到平台真实节点
+        String alias = aliasSubtype(type, subtype);
+        if (alias != null && known.contains(alias)) {
+            return alias.split(":", 2);
+        }
+        // 再按大类兜底到该大类第一个可用节点，保证类型合法
+        String fallback = switch (type) {
+            case "trigger" -> firstOf(known, "trigger", "schedule", "manual", "kafka", "mqtt");
+            case "source" -> firstOf(known, "source", "http", "mysql", "opcua", "modbus");
+            case "code" -> firstOf(known, "code", "nodejs", "python");
+            case "logic" -> firstOf(known, "logic", "condition", "filter", "delay", "merge");
+            case "output" -> firstOf(known, "output", "alert", "http", "timeseries", "feishu_bitable");
+            default -> null;
+        };
+        return fallback != null ? fallback.split(":", 2) : new String[]{"source", "http"};
+    }
+
+    private String firstOf(Set<String> known, String type, String... candidates) {
+        for (String candidate : candidates) {
+            if (known.contains(type + ":" + candidate)) {
+                return type + ":" + candidate;
+            }
+        }
+        return null;
+    }
+
+    /** 模型常见的口语化 subtype → 平台合法 subtype。 */
+    private String aliasSubtype(String type, String subtype) {
+        String s = subtype.replaceAll("[^a-z0-9]", "");
+        if (s.contains("mail") || s.contains("email") || s.contains("邮件")) {
+            return "output:alert";
+        }
+        if (s.contains("weather") || s.contains("天气") || s.equals("http") || s.contains("api")) {
+            return knownType("source", "http");
+        }
+        if (s.contains("sql") || s.contains("mysql") || s.contains("database") || s.contains("db")) {
+            return knownType("source", "mysql");
+        }
+        if (s.contains("condition") || s.contains("if") || s.contains("判断") || s.contains("分支")) {
+            return knownType("logic", "condition");
+        }
+        if (s.contains("python")) {
+            return "code:python";
+        }
+        if (s.contains("code") || s.contains("script") || s.contains("js")) {
+            return "code:nodejs";
+        }
+        if (s.contains("cron") || s.contains("timer") || s.contains("schedule") || s.contains("定时")) {
+            return "trigger:schedule";
+        }
+        return null;
+    }
+
+    /** 别名映射里优先复用注册表实际存在的 subtype（兼容节点包裁剪）。 */
+    private String knownType(String type, String subtype) {
+        for (NodeDefinition def : nodeRegistry.definitions()) {
+            if (def.type().equals(type) && def.subtype().equals(subtype)) {
+                return type + ":" + subtype;
+            }
+        }
+        return null;
+    }
+
+    private boolean mentionsMail(String text) {
+        String t = text.toLowerCase();
+        return t.contains("mail") || t.contains("邮件") || t.contains("email");
+    }
+
+    private String defaultTitle(String type, String subtype) {
+        for (NodeDefinition def : nodeRegistry.definitions()) {
+            if (def.type().equals(type) && def.subtype().equals(subtype)) {
+                return def.title();
+            }
+        }
+        return subtype.isEmpty() ? type : subtype;
+    }
+
+    private static Map<String, Object> stringMap(Map<?, ?> raw) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        raw.forEach((k, v) -> result.put(String.valueOf(k), v));
+        return result;
+    }
+
+    private static String lower(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
+    }
+
+    /** 文本中是否含汉字；用于把模型给出的英文标题兜底成平台中文展示名。 */
+    private static boolean hasChinese(String value) {
+        if (value == null) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c >= 0x4E00 && c <= 0x9FFF) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String str(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private static int number(Object value, int fallback) {
+        if (value instanceof Number n) {
+            return n.intValue();
+        }
+        if (value instanceof String s) {
+            try {
+                return Integer.parseInt(s.trim());
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
     }
 
     /** 构造节点并自动排布坐标。 */
@@ -581,7 +955,10 @@ public class AiService {
             return raw;
         }
         String from = source == null ? "数据" : source.title();
-        return from + " → " + output.title().replace("写入", "").replace("推送", "");
+        String to = output == null ? "处理" : output.title().replace("写入", "").replace("推送", "");
+        // 长描述截取前半段，保证名称可读且不至于过长
+        String head = raw.length() > 24 ? raw.substring(0, 24) : raw;
+        return head.isEmpty() ? from + " → " + to : head;
     }
 
     /** 整数阈值不显示小数点，避免生成 {{ $json.value > 85.0 }}。 */

@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import cn.tonglink.ai.AiService;
 import cn.tonglink.execution.ExecutionService;
 import cn.tonglink.repository.FlowRepository;
 import cn.tonglink.scheduler.ScheduleService;
@@ -31,11 +32,15 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,6 +84,9 @@ class IntegrationTest {
     @Autowired
     private CryptoService cryptoService;
 
+    @Autowired
+    private AiService aiService;
+
     private final ObjectMapper json = new ObjectMapper();
 
     /** 每个测试类使用唯一数据库文件，避免上次运行残留数据。 */
@@ -120,6 +128,17 @@ class IntegrationTest {
                 """, id, "P-001", "定时测试流程", "", "active", graph, graph, 1, nextRun,
                 "—", 0L, "100%", now, now);
         return graph;
+    }
+
+    /** 插入一条名称独特的流程，供 AI 上下文断言使用。 */
+    private void insertNamedFlow(String id, String name) {
+        String now = LocalDateTime.now().withNano(0).toString();
+        jdbc.update("""
+                INSERT INTO flow_definition(id,project_id,name,description,status,graph_json,
+                                            published_graph_json,published_version,next_run,last_run,
+                                            records,success_rate,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, id, "P-001", name, "", "active", "{}", "{}", 0, "—", "—", 9999L, "100%", now, now);
     }
 
     /** 精确 timer 在对齐间隔之外也能按计划时刻触发，不必等下一次 5 秒扫描。 */
@@ -826,6 +845,14 @@ class IntegrationTest {
         assertThat(data.path("presets").size()).isGreaterThanOrEqualTo(5);
         List<String> keys = data.path("presets").findValuesAsText("key");
         assertThat(keys).contains("deepseek", "zhipu", "qwen", "hunyuan", "local");
+        // 每个厂商都带常用模型列表和官方文档入口，模型更新由文档兜底
+        for (JsonNode preset : data.path("presets")) {
+            if (List.of("deepseek", "zhipu", "qwen", "hunyuan").contains(preset.path("key").asText())) {
+                assertThat(preset.path("models").size()).isGreaterThan(0);
+                assertThat(preset.path("docsUrl").asText()).startsWith("https://");
+            }
+        }
+        assertThat(data.path("configs").isObject()).isTrue();
     }
 
     /** AI 设置：保存后密钥只回显掩码，生效来源为 settings；清空后回到本地。 */
@@ -855,7 +882,7 @@ class IntegrationTest {
         assertThat(data.path("apiKeyMask").asText()).contains("******");
         assertThat(data.path("apiKeyMask").asText()).doesNotContain("sk-test-secret-key-123456");
         // 数据库里只存密文，不含明文
-        String cipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='default'", String.class);
+        String cipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='deepseek'", String.class);
         assertThat(cipher).startsWith("v1:");
         assertThat(cipher).doesNotContain("sk-test-secret-key");
 
@@ -878,7 +905,7 @@ class IntegrationTest {
                         .content("{\"provider\":\"qwen\",\"endpoint\":\"https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions\","
                                 + "\"model\":\"qwen-plus\",\"apiKey\":\"sk-original-key-abcdef\"}"))
                 .andExpect(status().isOk());
-        String beforeCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='default'", String.class);
+        String beforeCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='qwen'", String.class);
 
         mvc.perform(put("/api/v1/ai/settings")
                         .header("Authorization", "Bearer " + token)
@@ -886,7 +913,7 @@ class IntegrationTest {
                         .content("{\"provider\":\"qwen\",\"endpoint\":\"https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions\","
                                 + "\"model\":\"qwen-turbo\",\"apiKey\":\"******\"}"))
                 .andExpect(status().isOk());
-        String afterCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='default'", String.class);
+        String afterCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='qwen'", String.class);
         // AES-GCM 每次加密 IV 不同，密文必然不同；要验证的是明文没被掩码覆盖
         assertThat(cryptoService.decrypt(afterCipher)).isEqualTo("sk-original-key-abcdef");
         assertThat(cryptoService.decrypt(beforeCipher)).isEqualTo("sk-original-key-abcdef");
@@ -896,14 +923,74 @@ class IntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    /** AI 设置：各厂商密钥独立保存与回显，切换厂商不会串用，掩码占位符只保留本厂商密钥。 */
+    @Test
+    void AI设置各厂商密钥互不影响() throws Exception {
+        String token = login();
+        mvc.perform(post("/api/v1/ai/settings/reset").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mvc.perform(put("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"provider\":\"deepseek\",\"endpoint\":\"https://api.deepseek.com/v1/chat/completions\","
+                                + "\"model\":\"deepseek-chat\",\"apiKey\":\"sk-deepseek-secret-aaa\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(put("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"provider\":\"zhipu\",\"endpoint\":\"https://open.bigmodel.cn/api/paas/v4/chat/completions\","
+                                + "\"model\":\"glm-4-flash\",\"apiKey\":\"sk-zhipu-secret-bbb\"}"))
+                .andExpect(status().isOk());
+
+        MvcResult result = mvc.perform(get("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.activeProvider").value("zhipu"))
+                .andReturn();
+        JsonNode configs = read(result).path("data").path("configs");
+        assertThat(configs.path("deepseek").path("apiKeyMask").asText()).isEqualTo("sk-******aaa");
+        assertThat(configs.path("zhipu").path("apiKeyMask").asText()).isEqualTo("sk-******bbb");
+        assertThat(configs.path("deepseek").path("model").asText()).isEqualTo("deepseek-chat");
+        assertThat(configs.path("zhipu").path("model").asText()).isEqualTo("glm-4-flash");
+        // 顶层展示的是当前生效厂商，不能把另一家密钥带出来
+        assertThat(read(result).path("data").path("apiKeyMask").asText()).isEqualTo("sk-******bbb");
+
+        // 只改 deepseek 的模型名，密钥留空，不应改掉它的 Key，更不能动 zhipu 的 Key
+        mvc.perform(put("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"provider\":\"deepseek\",\"endpoint\":\"https://api.deepseek.com/v1/chat/completions\","
+                                + "\"model\":\"deepseek-reasoner\",\"apiKey\":\"******\"}"))
+                .andExpect(status().isOk());
+        String deepseekCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='deepseek'", String.class);
+        String zhipuCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='zhipu'", String.class);
+        assertThat(cryptoService.decrypt(deepseekCipher)).isEqualTo("sk-deepseek-secret-aaa");
+        assertThat(cryptoService.decrypt(zhipuCipher)).isEqualTo("sk-zhipu-secret-bbb");
+
+        mvc.perform(post("/api/v1/ai/settings/reset").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        MvcResult cleared = mvc.perform(get("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.active").value(false))
+                .andReturn();
+        assertThat(read(cleared).path("data").path("configs").size()).isZero();
+    }
+
     /** AI 设置生效链路：保存设置后生成流程改走大模型；清空后回退本地规则引擎。 */
     @Test
     void AI设置切换大模型并可回退() throws Exception {
         // 本地模拟 OpenAI 兼容接口，返回一个可被解析为流程的最小 JSON
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        // 故意返回问题场景：email/weather 两个平台不存在的 subtype，且 connections 为空。
+        // 规范化后应变成合法节点（alert/http）并按顺序补齐连线。
         String flowJson = """
-                {"schemaVersion":1,"nodes":[{"id":"n1","type":"trigger","subtype":"schedule",
-                 "title":"模型生成","position":{"x":60,"y":140},"config":{}}],"connections":[]}
+                {"schemaVersion":1,"name":"Weather Email Alert","nodes":[
+                 {"id":"a","type":"trigger","subtype":"schedule","title":"Schedule","position":{"x":60,"y":140},"config":{}},
+                 {"id":"b","type":"source","subtype":"weather","title":"Fetch Weather","position":{"x":350,"y":140},"config":{}},
+                 {"id":"c","type":"output","subtype":"email","title":"Send Email","position":{"x":640,"y":140},"config":{}}
+                ],"connections":[]}
                 """;
         String reply = json.writeValueAsString(Map.of("choices",
                 List.of(Map.of("message", Map.of("content", flowJson)))));
@@ -933,7 +1020,28 @@ class IntegrationTest {
                     .andExpect(jsonPath("$.data.source").value("llm"))
                     .andExpect(jsonPath("$.data.provider").value("custom"))
                     .andReturn();
-            assertThat(read(llm).path("data").path("flow").path("nodes").size()).isEqualTo(1);
+            JsonNode generated = read(llm).path("data").path("flow");
+            assertThat(generated.path("nodes").size()).isEqualTo(3);
+            // 非法的 weather/email 必须被纠正为平台真实存在的 subtype
+            List<String> subtypes = generated.path("nodes").findValuesAsText("subtype");
+            assertThat(subtypes).doesNotContain("weather", "email");
+            JsonNode definitions = read(mvc.perform(get("/api/v1/nodes/definitions")).andReturn());
+            Set<String> knownSubtypes = new HashSet<>();
+            definitions.path("data").forEach(d -> knownSubtypes.add(d.path("subtype").asText()));
+            assertThat(knownSubtypes).containsAll(subtypes);
+            // 模型没给连线时，后端应按顺序补齐，保证节点间有连线且端点存在
+            JsonNode connections = generated.path("connections");
+            assertThat(connections.size()).isGreaterThanOrEqualTo(2);
+            Set<String> nodeIds = new HashSet<>();
+            generated.path("nodes").forEach(n -> nodeIds.add(n.path("id").asText()));
+            for (JsonNode edge : connections) {
+                assertThat(nodeIds).contains(edge.path("source").asText(), edge.path("target").asText());
+            }
+            // 模型给出英文流程名与英文节点标题时，后端统一换成中文展示名
+            assertThat(generated.path("name").asText()).contains("生成一个流程");
+            List<String> titles = generated.path("nodes").findValuesAsText("title");
+            assertThat(titles).doesNotContain("Schedule", "Fetch Weather", "Send Email");
+            assertThat(titles).allMatch(t -> t.matches(".*[\\u4e00-\\u9fff].*"));
 
             mvc.perform(post("/api/v1/ai/settings/reset")
                             .header("Authorization", "Bearer " + token))
@@ -950,6 +1058,82 @@ class IntegrationTest {
             server.stop(0);
             mvc.perform(post("/api/v1/ai/settings/reset")
                             .header("Authorization", "Bearer " + token));
+        }
+    }
+
+    /** 未配置大模型时，问答基于真实流程数据回答，不再使用写死的演示数字。 */
+    @Test
+    void AI问答本地回退基于真实运行数据() throws Exception {
+        String token = login();
+        String name = "温度巡检上下文流程";
+        insertNamedFlow("FLOW-AI-CONTEXT-" + System.nanoTime(), name);
+        mvc.perform(post("/api/v1/ai/settings/reset").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        MvcResult result = mvc.perform(post("/api/v1/ai/ask")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"当前采集任务运行情况如何？\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.source").value("local-rules"))
+                .andReturn();
+        String answer = read(result).path("data").path("answer").asText();
+        assertThat(answer).contains(name).contains("流程总数");
+        assertThat(answer).doesNotContain("PT101");
+    }
+
+    /** 配置模型后，问答把真实上下文放进 system 提示词，并支持流式逐段输出。 */
+    @Test
+    void AI问答注入运行上下文并支持流式输出() throws Exception {
+        AtomicReference<String> captured = new AtomicReference<>();
+        String sse = "data: {\"choices\":[{\"delta\":{\"content\":\"运行\"}}]}\n\n"
+                + "data: {\"choices\":[{\"delta\":{\"content\":\"正常\"}}]}\n\n"
+                + "data: [DONE]\n\n";
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            captured.set(requestBody);
+            boolean stream = requestBody.contains("\"stream\":true");
+            String response = stream ? sse : json.writeValueAsString(Map.of("choices",
+                    List.of(Map.of("message", Map.of("content", "上下文已收到")))));
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type",
+                    stream ? "text/event-stream" : "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        String token = login();
+        String name = "上下文注入验证流程";
+        insertNamedFlow("FLOW-AI-PROMPT-" + System.nanoTime(), name);
+        try {
+            String endpoint = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1/chat/completions";
+            mvc.perform(put("/api/v1/ai/settings")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"provider\":\"custom\",\"endpoint\":\"" + endpoint
+                                    + "\",\"model\":\"mock-model\",\"apiKey\":\"sk-mock\"}"))
+                    .andExpect(status().isOk());
+
+            MvcResult answer = mvc.perform(post("/api/v1/ai/ask")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"question\":\"当前采集任务运行情况如何？\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.source").value("llm"))
+                    .andExpect(jsonPath("$.data.answer").value("上下文已收到"))
+                    .andReturn();
+            assertThat(answer).isNotNull();
+            String sent = captured.get();
+            assertThat(sent).contains("\"role\":\"system\"").contains("流程总数").contains(name);
+
+            List<String> chunks = new ArrayList<>();
+            Map<String, Object> meta = aiService.askStream("当前采集任务运行情况如何？", chunks::add);
+            assertThat(String.join("", chunks)).isEqualTo("运行正常");
+            assertThat(meta).containsEntry("source", "llm");
+        } finally {
+            server.stop(0);
+            mvc.perform(post("/api/v1/ai/settings/reset").header("Authorization", "Bearer " + token));
         }
     }
 

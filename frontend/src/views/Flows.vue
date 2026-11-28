@@ -38,6 +38,9 @@ const managerVisible = ref(false)
 const market = ref<any[]>([])
 const aiVisible = ref(false)
 const aiPrompt = ref('')
+const aiGenerating = ref(false)
+const aiElapsed = ref(0)
+let aiTimer: number | undefined
 const fileInput = ref<HTMLInputElement>()
 const localNodeInput = ref<HTMLInputElement>()
 const running = ref(false)
@@ -346,8 +349,13 @@ async function selectFlow(flow: any) {
   dirty.value = false
   const graph = parseGraph(flow)
   nodes.value = (graph?.nodes || []).map(toVueNode)
-  edges.value = (graph?.connections || []).map((e: any) =>
-    makeEdge(e.id, e.source, e.target, e.sourceHandle || 'out', e.targetHandle || 'in'))
+  const nodeIds = new Set(nodes.value.map((n: any) => n.id))
+  // 丢弃端点指向不存在节点的连线：历史草稿/AI 早期版本可能存了悬空边，
+  // VueFlow 渲染时会因找不到节点而抛 Cannot read properties of null (reading 'parentNode')。
+  edges.value = (graph?.connections || [])
+    .filter((e: any) => e?.id && nodeIds.has(e.source) && nodeIds.has(e.target))
+    .map((e: any) =>
+      makeEdge(e.id, e.source, e.target, e.sourceHandle || 'out', e.targetHandle || 'in'))
   syncMergeInputs()
   // 切换流程后，上一次执行的成功勾/绿色箭头不再适用
   activeExecution.value = null
@@ -382,6 +390,9 @@ function graphPayload() {
   }
 }
 
+/** 正在离开本页：路由离开时的保存只写库，不再回写画布状态，避免卸载期重渲染。 */
+let leaving = false
+
 /** 保存画布草稿；silent=true 用于自动保存，不弹成功提示。 */
 async function saveFlow(silent = false): Promise<boolean> {
   if (!current.value) return false
@@ -390,10 +401,12 @@ async function saveFlow(silent = false): Promise<boolean> {
   try {
     const payload = { name: current.value.name, projectId: store.projectId, graph: graphPayload() }
     const saved: any = await api.updateFlow(current.value.id, payload)
-    current.value = saved
-    // 同步左侧流程列表：否则切换流程再切回来会读到旧 graphJson，看起来像「没保存」
-    const idx = flows.value.findIndex((f: any) => f.id === saved.id)
-    if (idx >= 0) flows.value[idx] = saved
+    if (!leaving) {
+      current.value = saved
+      // 同步左侧流程列表：否则切换流程再切回来会读到旧 graphJson，看起来像「没保存」
+      const idx = flows.value.findIndex((f: any) => f.id === saved.id)
+      if (idx >= 0) flows.value[idx] = saved
+    }
     savedSignature = signature
     // 保存期间若又改了图，保持脏状态，交给下一次自动保存
     dirty.value = graphSignature() !== signature
@@ -1145,21 +1158,33 @@ async function installLocal(event: any) {
 }
 
 async function generateFlow() {
+  if (aiGenerating.value) return
   if (!await autoSave() && dirty.value) return
-  const result: any = await api.aiGenerate(aiPrompt.value, store.projectId)
-  const graph = result.flow
-  // 草稿必须先真正落库：之前只放进 current，自动保存会对不存在的流程 ID 反复报
-  // 「流程保存失败：流程不存在」。这里用 AI 返回的 ID 直接建库，后续即可正常自动保存。
-  const created: any = await api.createFlow({
-    id: graph.id,
-    name: graph.name,
-    projectId: graph.projectId || store.projectId,
-    graph
-  })
-  flows.value.unshift(created)
-  aiVisible.value = false
-  await selectFlow(created)
-  ElMessage.success('AI 已生成草稿并保存到流程库，可继续编辑')
+  aiGenerating.value = true
+  aiElapsed.value = 0
+  aiTimer = window.setInterval(() => { aiElapsed.value++ }, 1000)
+  try {
+    const result: any = await api.aiGenerate(aiPrompt.value, store.projectId)
+    const graph = result.flow
+    // 草稿必须先真正落库：之前只放进 current，自动保存会对不存在的流程 ID 反复报
+    // 「流程保存失败：流程不存在」。这里用 AI 返回的 ID 直接建库，后续即可正常自动保存。
+    const created: any = await api.createFlow({
+      id: graph.id,
+      name: graph.name,
+      projectId: graph.projectId || store.projectId,
+      graph
+    })
+    flows.value.unshift(created)
+    aiVisible.value = false
+    await selectFlow(created)
+    ElMessage.success('AI 已生成草稿并保存到流程库，可继续编辑')
+  } catch (e: any) {
+    ElMessage.error('生成失败：' + (e.message || '未知错误'))
+  } finally {
+    aiGenerating.value = false
+    if (aiTimer !== undefined) window.clearInterval(aiTimer)
+    aiTimer = undefined
+  }
 }
 
 function onRemoveEdgeEvent(event: Event) {
@@ -1182,9 +1207,18 @@ onMounted(() => {
   // 兜底自动保存：即使一直停留在同一画布，也定期把变更落盘
   autosaveTimer = window.setInterval(() => { autoSave() }, 15000)
 })
-// 点击左侧菜单离开本页时，先等草稿写库完成再放行路由
+// 点击左侧菜单离开本页时，先等草稿写库完成再放行路由。
+// 这里 await 保存后才放行，卸载阶段不要再触发保存：否则组件销毁过程中 current.value
+// 被替换、edges 被整体重建，VueFlow 的 EdgeLabelRenderer Teleport 目标变 null，
+// 控制台会抛 Uncaught (in promise) TypeError: Cannot read properties of null (reading 'parentNode')。
 onBeforeRouteLeave(async () => {
-  await autoSave()
+  leaving = true
+  try {
+    await autoSave()
+  } catch (e) {
+    // 保存失败不阻断离开：草稿仍在内存，下次进入可继续；避免守卫永久卡住页面切换
+    console.warn('离开流程页自动保存失败', e)
+  }
   return true
 })
 onUnmounted(() => {
@@ -1200,7 +1234,9 @@ onUnmounted(() => {
   window.removeEventListener('mouseup', endInlineResize)
   if (autosaveTimer !== undefined) window.clearInterval(autosaveTimer)
   if (execPollTimer !== undefined) window.clearInterval(execPollTimer)
-  autoSave()
+  if (aiTimer !== undefined) window.clearInterval(aiTimer)
+  // 卸载阶段不再触发自动保存：路由离开已在 onBeforeRouteLeave 中 await 完成，
+  // 这里再发起请求只会在组件销毁后替换 current/edges，触发 Teleport 的 parentNode 报错。
 })
 </script>
 
@@ -1447,11 +1483,18 @@ onUnmounted(() => {
       <input ref="localNodeInput" type="file" accept="application/json" style="display:none" @change="installLocal" />
     </el-drawer>
 
-    <el-dialog v-model="aiVisible" title="AI 生成流程" width="520px">
-      <el-input v-model="aiPrompt" type="textarea" :rows="4" placeholder="例如：每 10 分钟读取 OPC UA 温度点位，超过 85 度推送飞书告警" />
+    <el-dialog v-model="aiVisible" title="AI 生成流程" width="520px"
+               :close-on-click-modal="false" :close-on-press-escape="!aiGenerating">
+      <el-input v-model="aiPrompt" type="textarea" :rows="4" :disabled="aiGenerating"
+                placeholder="例如：每 10 分钟读取 OPC UA 温度点位，超过 85 度推送飞书告警" />
+      <div v-if="aiGenerating" class="muted" style="margin-top:10px;font-size:12px">
+        正在生成草稿，已等待 {{ aiElapsed }} 秒。大模型生成通常需要 10–60 秒，请勿重复点击；生成完成后会自动载入画布。
+      </div>
       <template #footer>
-        <el-button @click="aiVisible = false">取消</el-button>
-        <el-button type="primary" @click="generateFlow">生成草稿</el-button>
+        <el-button :disabled="aiGenerating" @click="aiVisible = false">取消</el-button>
+        <el-button type="primary" :loading="aiGenerating" @click="generateFlow">
+          {{ aiGenerating ? '生成中…' : '生成草稿' }}
+        </el-button>
       </template>
     </el-dialog>
 

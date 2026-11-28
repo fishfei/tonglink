@@ -172,8 +172,9 @@ CREATE TABLE IF NOT EXISTS ai_message (
   created_at TEXT
 );
 
--- AI 设置：单行记录（id 固定 'default'）。api_key_cipher 用全局主密钥加密；
--- 未写入本表时回退到 application.yml 的 tonglink.ai.*（可用环境变量覆盖），两者都没有则用本地规则引擎。
+-- AI 设置：每个厂商一行（id 即 provider），各自保存独立的接口地址、模型与加密密钥，互不干扰。
+-- 额外一行 id='__active__' 记录当前启用的引擎；未配置任何厂商时使用本地规则引擎。
+-- api_key_cipher 用全局主密钥加密，接口只回显掩码。
 CREATE TABLE IF NOT EXISTS ai_settings (
   id VARCHAR(32) PRIMARY KEY,
   provider VARCHAR(32) NOT NULL DEFAULT 'local',

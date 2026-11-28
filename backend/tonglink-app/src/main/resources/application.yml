@@ -35,6 +35,9 @@ spring:
       max-request-size: 10MB
   mvc:
     static-path-pattern: /**
+    # SSE 流式问答走异步请求，默认 30 秒会在模型出完内容前就断开
+    async:
+      request-timeout: 180000
 
 server:
   port: ${SERVER_PORT:8080}
@@ -93,12 +96,6 @@ tonglink:
       jdbc-url: ${TONGLINK_TEST_MYSQL_JDBC_URL:jdbc:mysql://127.0.0.1:3306/weather?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&connectTimeout=5000}
       username: ${TONGLINK_TEST_MYSQL_USERNAME:root}
       password: ${TONGLINK_TEST_MYSQL_PASSWORD:change-me}
-  ai:
-    provider: ${TONGLINK_AI_PROVIDER:local}
-    endpoint: ${TONGLINK_AI_ENDPOINT:}
-    api-key: ${TONGLINK_AI_API_KEY:}
-    model: ${TONGLINK_AI_MODEL:gpt-4o-mini}
-
 management:
   endpoints:
     web:

@@ -217,11 +217,9 @@ docker compose logs -f app
 | `TONGLINK_NODE_CMD` | `node` | Node.js 可执行文件（代码节点） |
 | `TONGLINK_PYTHON_CMD` | `python3` | Python 可执行文件（代码节点） |
 | `TONGLINK_PYTHON_FALLBACK` | `python` | Python 命令回退名 |
-| `TONGLINK_AI_PROVIDER` | `local` | AI 引擎；运行时优先读「AI 设置」页保存的配置，未配置时才用这里的值。可选 `local` / `deepseek` / `zhipu` / `qwen` / `hunyuan` / `custom` |
-| `TONGLINK_AI_ENDPOINT` | 空 | OpenAI 兼容 Chat Completions 完整地址（未使用 AI 设置页时生效） |
-| `TONGLINK_AI_API_KEY` | 空 | AI 接口密钥 |
-| `TONGLINK_AI_MODEL` | `gpt-4o-mini` | AI 模型名 |
 | `TZ` | `Asia/Shanghai` | 容器时区，影响定时触发 |
+
+> AI 模型连接信息（厂商、接口地址、模型名、API Key）**只在「设置 → AI 模型」页配置**，不提供环境变量；未配置时使用离线规则引擎。连接超时为内置固定值，不通过环境变量调整。
 
 > 说明：队列模式（Redis）、外部 Runner、OTel 链路追踪仍属架构扩展目标，尚未接入镜像默认配置；PostgreSQL 标准模式已实际可用，按第 5 节操作即可。
 

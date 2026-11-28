@@ -13,7 +13,7 @@ const router = createRouter({
     { path: '/variables', component: () => import('./views/Variables.vue') },
     { path: '/executions', component: () => import('./views/Executions.vue') },
     { path: '/ai', component: () => import('./views/Ai.vue') },
-    { path: '/ai-settings', component: () => import('./views/AiSettings.vue') }
+    { path: '/settings', component: () => import('./views/Settings.vue') }
   ]
 })
 

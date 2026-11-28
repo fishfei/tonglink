@@ -79,7 +79,7 @@
 | 队列 | 进程内队列（默认）/ Redis Streams（队列模式） | Lettuce 6.5 / Redis 7+ | BSD / 视版本 | 默认零依赖，队列模式用消费组 + `XAUTOCLAIM` 接管超时消息 |
 | 调度 | `@Scheduled` + `CronExpression` 轻量调度 | Spring Boot 3.5 内置 | Apache-2.0 | 每 5s tick 扫描 `next_run`，秒/分/Cron 统一换算；单实例足够，不引入 Quartz |
 | 安全 | Spring Security + JWT + AES-GCM | - | Apache-2.0 | 无状态 API，数据源密码字段 AES-GCM 加密 |
-| AI | 本地规则引擎 + 可选 OpenAI 兼容接口 | - | 本项目 MIT | 默认离线可用；配置 `TONGLINK_AI_PROVIDER=openai` 后走真实 LLM，基于 JDK HttpClient |
+| AI | 本地规则引擎 + 可选 OpenAI 兼容接口 | - | 本项目 MIT | 默认离线可用；在「设置 → AI 模型」页配置后走真实 LLM，基于 JDK HttpClient |
 | 可观测 | Spring Boot Actuator（health/info/metrics） | Spring Boot 3.5 内置 | Apache-2.0 | 提供健康检查与基础指标；OTel 链路追踪、Prometheus/Grafana 属可选增强 |
 | 文档 | springdoc-openapi | 2.x | Apache-2.0 | 自动生成 API 文档 |
 | 测试 | Vitest / JUnit 5 + 环境变量门控真机测试 | - | MIT / Apache-2.0 | 前端单测 + 后端集成测试；Kafka/MQTT/PG/Redis/Modbus/OPC UA 用真机联调，不用 Testcontainers |
@@ -531,7 +531,7 @@ sequenceDiagram
 
 ## 11. AI 能力
 
-- 技术栈：默认本地规则引擎（关键词意图识别，零依赖离线可用）；配置 `TONGLINK_AI_PROVIDER=openai` + endpoint/key 后切换 OpenAI 兼容接口。不引入 Spring AI，无外置 Prompt 模板目录。
+- 技术栈：默认本地规则引擎（关键词意图识别，零依赖离线可用）；在「设置 → AI 模型」页填入接口地址/Key/模型后切换 OpenAI 兼容接口。各厂商配置在 `ai_settings` 表按 provider 分行独立存储，另有一行记录当前启用的引擎；API Key 加密、只回显掩码。不引入 Spring AI，无外置 Prompt 模板目录。
 - **自然语言生成流程**：规则引擎（或可选 LLM）按平台真实节点契约与数据源输出结构化流程 JSON；后端做节点类型、必填字段校验与环检测后才返回草稿，前端动画加载，用户确认才保存/发布。凭据已并入数据源，无独立 `listCredentials` 工具。
 - **失败诊断**：把 `execution_node` 状态、错误堆栈与节点 Schema 组装成 Prompt（或走本地规则），返回结构化 `{ rootCause, evidence[], fixes[] }`，前端渲染诊断卡；当前未接入向量检索。
 - **异常问答**：`metric_point` 上用统计规则（3-sigma / EWMA）打异常标记，LLM 负责用自然语言解释；问答仅基于已聚合数据，不直接查原始大表。
