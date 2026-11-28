@@ -14,15 +14,17 @@ export JAVA_HOME="$WIN_ROOT\\tools\\jdk-21.0.2"
 MVN="${MVN:-$TOOLS/apache-maven-3.9.9/bin/mvn.cmd}"
 MVN_ARGS=(-B -ntp -s "$TOOLS/settings.xml" -f "$ROOT/backend/pom.xml")
 
-# 镜像内运行所需 Java / Node 二进制不入库，缺失时自动下载
-if [ ! -x "$ROOT/docker/extra/opt/java/bin/java" ]; then
+# 镜像内运行所需 Java / Node 二进制不入库，缺失时自动下载。
+# 用 -f 而非 -x：Windows 文件系统不保留 Linux 执行位（-x 恒为假会导致重复下载），
+# 执行位由 Jib extraDirectories.permissions 在打镜像时显式设置。
+if [ ! -f "$ROOT/docker/extra/opt/java/bin/java" ]; then
   echo "==> 下载 Java 21 Linux 运行时"
   mkdir -p "$ROOT/docker/extra/opt/java" "$ROOT/tools"
   curl -fsSL -o "$ROOT/tools/jdk21-linux.tar.gz" \
     https://repo.huaweicloud.com/openjdk/21.0.2/openjdk-21.0.2_linux-x64_bin.tar.gz
   tar -xzf "$ROOT/tools/jdk21-linux.tar.gz" -C "$ROOT/docker/extra/opt/java" --strip-components=1 --exclude='legal/*' || true
 fi
-if [ ! -x "$ROOT/docker/extra/opt/node/bin/node" ]; then
+if [ ! -f "$ROOT/docker/extra/opt/node/bin/node" ]; then
   echo "==> 下载 Node.js 22 Linux 运行时"
   mkdir -p "$ROOT/docker/extra/opt/node" "$ROOT/tools"
   curl -fsSL -o "$ROOT/tools/node-linux.tar.xz" \
