@@ -9,5 +9,6 @@
   <dependencies>
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-workflow</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-repository</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>cn.tonglink</groupId><artifactId>tonglink-security</artifactId><version>${project.version}</version></dependency>
   </dependencies>
 </project>

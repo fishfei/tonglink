@@ -12,7 +12,8 @@ const router = createRouter({
     { path: '/nodes', component: () => import('./views/Nodes.vue') },
     { path: '/variables', component: () => import('./views/Variables.vue') },
     { path: '/executions', component: () => import('./views/Executions.vue') },
-    { path: '/ai', component: () => import('./views/Ai.vue') }
+    { path: '/ai', component: () => import('./views/Ai.vue') },
+    { path: '/ai-settings', component: () => import('./views/AiSettings.vue') }
   ]
 })
 

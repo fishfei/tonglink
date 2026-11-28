@@ -172,6 +172,17 @@ CREATE TABLE IF NOT EXISTS ai_message (
   created_at TEXT
 );
 
+-- AI 设置：单行记录（id 固定 'default'）。api_key_cipher 用全局主密钥加密；
+-- 未写入本表时回退到 application.yml 的 tonglink.ai.*（可用环境变量覆盖），两者都没有则用本地规则引擎。
+CREATE TABLE IF NOT EXISTS ai_settings (
+  id VARCHAR(32) PRIMARY KEY,
+  provider VARCHAR(32) NOT NULL DEFAULT 'local',
+  endpoint TEXT,
+  api_key_cipher TEXT,
+  model VARCHAR(128),
+  updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id VARCHAR(64) PRIMARY KEY,
   actor VARCHAR(64),

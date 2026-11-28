@@ -112,5 +112,10 @@ export const api = {
   aiGenerate: (prompt: string, projectId: string) =>
     request.post('/ai/generate-flow', { prompt, projectId }),
   aiDiagnose: (executionId: string) => request.post('/ai/diagnose', { executionId }),
-  aiAsk: (question: string) => request.post('/ai/ask', { question })
+  aiAsk: (question: string) => request.post('/ai/ask', { question }),
+
+  aiSettings: () => request.get('/ai/settings'),
+  saveAiSettings: (data: any) => request.put('/ai/settings', data),
+  testAiSettings: (data: any) => request.post('/ai/settings/test', data),
+  resetAiSettings: () => request.post('/ai/settings/reset')
 }

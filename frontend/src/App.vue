@@ -19,7 +19,8 @@ const menus = [
   { path: '/nodes', label: '节点管理', icon: 'package' },
   { path: '/variables', label: '变量', icon: 'key' },
   { path: '/executions', label: '执行日志', icon: 'terminal' },
-  { path: '/ai', label: 'AI 助手', icon: 'sparkles' }
+  { path: '/ai', label: 'AI 助手', icon: 'sparkles' },
+  { path: '/ai-settings', label: 'AI 设置', icon: 'gear' }
 ]
 
 onMounted(() => {

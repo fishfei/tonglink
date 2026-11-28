@@ -12,12 +12,6 @@ import cn.tonglink.model.flow.FlowGraph;
 import cn.tonglink.model.flow.GraphEdge;
 import cn.tonglink.model.flow.GraphNode;
 import cn.tonglink.repository.ExecutionRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,15 +20,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
  * AI 能力：自然语言生成流程、执行失败诊断、数据异常问答。
  *
- * <p>默认使用本地规则引擎（零依赖、离线可用、响应稳定），配置
- * {@code TONGLINK_AI_PROVIDER=openai} + endpoint/key 后改用 OpenAI 兼容模型。
- * 这个设计让平台「开箱能用」，同时保留接入真实大模型的路径。</p>
+ * <p>默认使用本地规则引擎（零依赖、离线可用、响应稳定）。在「AI 设置」页保存
+ * 大模型连接信息（或通过 {@code TONGLINK_AI_*} 环境变量）后，生成流程、失败诊断与
+ * 问答改用 OpenAI 兼容模型；未配置或调用失败时自动回退本地规则引擎。</p>
  *
  * <p>规则引擎不是「假装 AI」：它按关键词识别意图、按平台真实的节点契约产出
  * 可校验、可落库的流程 JSON，因此即使用户没有配置任何模型也能完成闭环。</p>
@@ -67,21 +60,13 @@ public class AiService {
     private static final Pattern TABLE_NAME = Pattern.compile("([a-z_][a-z0-9_]{2,30})\\s*(?:表|table)");
 
     private final ExecutionRepository executions;
-    private final String provider;
-    private final String endpoint;
-    private final String apiKey;
-    private final String model;
+    private final AiSettingsService settings;
+    private final LlmClient llmClient;
 
-    public AiService(ExecutionRepository executions,
-                     @Value("${tonglink.ai.provider:local}") String provider,
-                     @Value("${tonglink.ai.endpoint:}") String endpoint,
-                     @Value("${tonglink.ai.api-key:}") String apiKey,
-                     @Value("${tonglink.ai.model:gpt-4o-mini}") String model) {
+    public AiService(ExecutionRepository executions, AiSettingsService settings, LlmClient llmClient) {
         this.executions = executions;
-        this.provider = provider;
-        this.endpoint = endpoint;
-        this.apiKey = apiKey;
-        this.model = model;
+        this.settings = settings;
+        this.llmClient = llmClient;
     }
 
     /**
@@ -92,16 +77,18 @@ public class AiService {
      * @return {@code {flow, source, explanation}}；flow 符合前端可直接渲染的图结构
      */
     public Map<String, Object> generateFlow(String prompt, String projectId) {
-        if (llmEnabled()) {
+        AiSettingsService.EffectiveConfig config = settings.effective();
+        if (config.enabled()) {
             try {
-                String reply = callLlm("你是 IoT 数据采集平台的流程生成器。根据用户描述生成 TongLink Studio 流程 JSON，"
+                String reply = callLlm(config, "你是 IoT 数据采集平台的流程生成器。根据用户描述生成 TongLink Studio 流程 JSON，"
                         + "只返回 JSON，不要解释。节点 type 取值 trigger/source/code/logic/output。用户描述：" + prompt);
                 Map<String, Object> parsed = JsonUtil.parse(extractJson(reply), Map.class);
                 if (parsed != null && parsed.get("nodes") != null) {
                     Map<String, Object> result = new LinkedHashMap<>();
                     result.put("flow", parsed);
                     result.put("source", "llm");
-                    result.put("explanation", "由大模型生成，请确认节点配置后保存。");
+                    result.put("provider", config.provider());
+                    result.put("explanation", "由大模型（" + config.provider() + "）生成，请确认节点配置后保存。");
                     return result;
                 }
             } catch (Exception e) {
@@ -186,6 +173,35 @@ public class AiService {
                 .orElse(null);
         String error = failed == null ? execution.errorSummary() : failed.errorMessage();
 
+        // 配置了大模型时先用模型诊断；失败或解析不出结构则回退下面的本地规则。
+        AiSettingsService.EffectiveConfig config = settings.effective();
+        if (config.enabled()) {
+            try {
+                String prompt = "你是 IoT 数据采集平台的执行失败诊断专家。请根据以下执行信息"
+                        + "给出诊断，只返回 JSON，格式为 {\"severity\":\"error|warning\","
+                        + "\"rootCause\":\"一句话根因\",\"evidence\":[\"证据\"],\"steps\":[\"修复步骤\"]}。"
+                        + "\n执行ID：" + executionId
+                        + "\n流程ID：" + execution.flowId()
+                        + "\n执行状态：" + execution.status()
+                        + "\n失败节点：" + (failed == null ? "未定位" : failed.nodeId() + "（" + failed.nodeType() + "）")
+                        + "\n错误信息：" + (error == null ? "无" : error);
+                String reply = callLlm(config, prompt);
+                Map<String, Object> parsed = JsonUtil.parse(extractJson(reply), Map.class);
+                if (parsed != null && parsed.get("rootCause") != null) {
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    result.put("severity", parsed.getOrDefault("severity", "error"));
+                    result.put("rootCause", parsed.get("rootCause"));
+                    result.put("evidence", parsed.getOrDefault("evidence", List.of()));
+                    result.put("steps", parsed.getOrDefault("steps", List.of()));
+                    result.put("source", "llm");
+                    result.put("provider", config.provider());
+                    return result;
+                }
+            } catch (Exception e) {
+                log.warn("LLM 诊断失败，回退到本地规则：{}", e.getMessage());
+            }
+        }
+
         String root = "未知错误";
         List<String> steps = new ArrayList<>();
         if (error != null && error.contains("ECONNREFUSED")) {
@@ -226,6 +242,7 @@ public class AiService {
         result.put("rootCause", root);
         result.put("evidence", evidence);
         result.put("steps", steps);
+        result.put("source", "local-rules");
         return result;
     }
 
@@ -236,12 +253,14 @@ public class AiService {
      * @return {@code {answer, source}}
      */
     public Map<String, Object> ask(String question) {
-        if (llmEnabled()) {
+        AiSettingsService.EffectiveConfig config = settings.effective();
+        if (config.enabled()) {
             try {
-                String reply = callLlm(question);
+                String reply = callLlm(config, question);
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("answer", reply);
                 result.put("source", "llm");
+                result.put("provider", config.provider());
                 return result;
             } catch (Exception e) {
                 log.warn("LLM 问答失败，回退到本地规则：{}", e.getMessage());
@@ -272,33 +291,9 @@ public class AiService {
 
     // ---------------- 内部工具 ----------------
 
-    private boolean llmEnabled() {
-        return !"local".equalsIgnoreCase(provider) && endpoint != null && !endpoint.isBlank();
-    }
-
-    /** 调用 OpenAI 兼容接口，返回首个 choice 的文本。 */
-    private String callLlm(String prompt) {
-        try {
-            String body = JsonUtil.stringify(Map.of(
-                    "model", model,
-                    "messages", List.of(Map.of("role", "user", "content", prompt))));
-            HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint))
-                    .timeout(Duration.ofSeconds(30))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .build();
-            HttpResponse<String> response = HttpClient.newHttpClient()
-                    .send(request, HttpResponse.BodyHandlers.ofString());
-            JsonNode tree = JsonUtil.tree(response.body());
-            if (tree == null) {
-                return "";
-            }
-            return tree.path("choices").path(0).path("message").path("content")
-                    .asText(response.body());
-        } catch (Exception e) {
-            throw new IllegalStateException("LLM 调用失败：" + e.getMessage(), e);
-        }
+    /** 用当前生效配置调用 OpenAI 兼容接口，返回首个 choice 的文本。 */
+    private String callLlm(AiSettingsService.EffectiveConfig config, String prompt) {
+        return llmClient.chat(config.endpoint(), config.apiKey(), config.model(), prompt);
     }
 
     /** 从模型回复中截取 JSON 片段，兼容 ```json 代码块包裹的情况。 */

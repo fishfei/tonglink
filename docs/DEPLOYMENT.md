@@ -217,8 +217,8 @@ docker compose logs -f app
 | `TONGLINK_NODE_CMD` | `node` | Node.js 可执行文件（代码节点） |
 | `TONGLINK_PYTHON_CMD` | `python3` | Python 可执行文件（代码节点） |
 | `TONGLINK_PYTHON_FALLBACK` | `python` | Python 命令回退名 |
-| `TONGLINK_AI_PROVIDER` | `local` | `local`（本地规则引擎）/ `openai`（兼容接口） |
-| `TONGLINK_AI_ENDPOINT` | 空 | OpenAI 兼容接口地址 |
+| `TONGLINK_AI_PROVIDER` | `local` | AI 引擎；运行时优先读「AI 设置」页保存的配置，未配置时才用这里的值。可选 `local` / `deepseek` / `zhipu` / `qwen` / `hunyuan` / `custom` |
+| `TONGLINK_AI_ENDPOINT` | 空 | OpenAI 兼容 Chat Completions 完整地址（未使用 AI 设置页时生效） |
 | `TONGLINK_AI_API_KEY` | 空 | AI 接口密钥 |
 | `TONGLINK_AI_MODEL` | `gpt-4o-mini` | AI 模型名 |
 | `TZ` | `Asia/Shanghai` | 容器时区，影响定时触发 |

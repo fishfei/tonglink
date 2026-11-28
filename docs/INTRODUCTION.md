@@ -74,6 +74,7 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 - 执行失败诊断：输出根因、证据、修复步骤的结构化诊断卡。
 - 数据异常问答：对采集数据做异常检测并支持自然语言提问。
 - 独立 AI 助手页 + 流程编排 / 执行日志 / 看板三处嵌入入口。
+- **AI 设置**：侧边栏「AI 设置」页可一键切换 DeepSeek、智谱 GLM、通义千问、腾讯混元或自定义 OpenAI 兼容模型，填写接口地址、模型名与 API Key 后即时生效；API Key 加密存储、仅掩码回显。未配置时使用离线规则引擎，模型调用失败自动回退，不影响流程运行。
 
 ### 2.8 节点插件
 
@@ -102,7 +103,7 @@ TongLink Studio 试图用一套统一的 DAG 编排模型解决这些问题：�
 - 队列：默认进程内队列；队列模式切 Redis Stream。
 - 代码运行：Task Runner 双模式，默认子进程、可选独立容器。
 - 协议：OPC UA 采用 Eclipse Milo `sdk-client`（真实读写），Modbus TCP 采用 j2mod（寄存器 / 线圈读写），MQTT 采用 Eclipse Paho；S7comm 暂未开放。
-- AI：默认本地规则引擎（离线可用），配置 `TONGLINK_AI_PROVIDER=openai` 后可接入 OpenAI 兼容接口。
+- AI：默认本地规则引擎（离线可用）；通过「AI 设置」页或 `TONGLINK_AI_PROVIDER` 等环境变量接入 OpenAI 兼容接口，支持 DeepSeek、智谱、千问、混元等国内主流模型。
 
 ## 5. 设计参考与开源边界
 

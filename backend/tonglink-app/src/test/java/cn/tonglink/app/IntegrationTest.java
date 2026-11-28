@@ -15,14 +15,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import cn.tonglink.execution.ExecutionService;
 import cn.tonglink.repository.FlowRepository;
 import cn.tonglink.scheduler.ScheduleService;
+import cn.tonglink.security.CryptoService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import com.zaxxer.hikari.HikariDataSource;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -72,6 +75,9 @@ class IntegrationTest {
 
     @Autowired
     private DataSource dataSource;
+
+    @Autowired
+    private CryptoService cryptoService;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -799,6 +805,152 @@ class IntegrationTest {
         // 生成的节点必须都是已注册的类型，否则保存时会被校验拦下
         List<String> types = flow.path("nodes").findValuesAsText("type");
         assertThat(types).allMatch(t -> List.of("trigger", "source", "code", "logic", "output").contains(t));
+    }
+
+    /** AI 设置：默认未配置时用本地规则引擎，设置列表含四家厂商预设。 */
+    @Test
+    void AI设置默认回退本地并给出预设() throws Exception {
+        String token = login();
+        mvc.perform(post("/api/v1/ai/settings/reset")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        MvcResult result = mvc.perform(get("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.active").value(false))
+                .andExpect(jsonPath("$.data.activeProvider").value("local"))
+                .andReturn();
+        JsonNode data = read(result).path("data");
+        assertThat(data.path("presets").size()).isGreaterThanOrEqualTo(5);
+        List<String> keys = data.path("presets").findValuesAsText("key");
+        assertThat(keys).contains("deepseek", "zhipu", "qwen", "hunyuan", "local");
+    }
+
+    /** AI 设置：保存后密钥只回显掩码，生效来源为 settings；清空后回到本地。 */
+    @Test
+    void AI设置保存后掩码回显且即时生效() throws Exception {
+        String token = login();
+        String body = """
+                {"provider":"deepseek","endpoint":"https://api.deepseek.com/v1/chat/completions",
+                 "model":"deepseek-chat","apiKey":"sk-test-secret-key-123456"}
+                """;
+        mvc.perform(put("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        MvcResult result = mvc.perform(get("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.provider").value("deepseek"))
+                .andExpect(jsonPath("$.data.model").value("deepseek-chat"))
+                .andExpect(jsonPath("$.data.active").value(true))
+                .andExpect(jsonPath("$.data.activeSource").value("settings"))
+                .andReturn();
+        JsonNode data = read(result).path("data");
+        assertThat(data.path("apiKeyMask").asText()).contains("******");
+        assertThat(data.path("apiKeyMask").asText()).doesNotContain("sk-test-secret-key-123456");
+        // 数据库里只存密文，不含明文
+        String cipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='default'", String.class);
+        assertThat(cipher).startsWith("v1:");
+        assertThat(cipher).doesNotContain("sk-test-secret-key");
+
+        // 清空后恢复本地引擎，避免影响后续用例
+        mvc.perform(post("/api/v1/ai/settings/reset")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.data.active").value(false));
+    }
+
+    /** AI 设置：提交掩码占位符表示不修改密钥，原密钥保持不变。 */
+    @Test
+    void AI设置掩码占位符保留原密钥() throws Exception {
+        String token = login();
+        mvc.perform(put("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"provider\":\"qwen\",\"endpoint\":\"https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions\","
+                                + "\"model\":\"qwen-plus\",\"apiKey\":\"sk-original-key-abcdef\"}"))
+                .andExpect(status().isOk());
+        String beforeCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='default'", String.class);
+
+        mvc.perform(put("/api/v1/ai/settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"provider\":\"qwen\",\"endpoint\":\"https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions\","
+                                + "\"model\":\"qwen-turbo\",\"apiKey\":\"******\"}"))
+                .andExpect(status().isOk());
+        String afterCipher = jdbc.queryForObject("SELECT api_key_cipher FROM ai_settings WHERE id='default'", String.class);
+        // AES-GCM 每次加密 IV 不同，密文必然不同；要验证的是明文没被掩码覆盖
+        assertThat(cryptoService.decrypt(afterCipher)).isEqualTo("sk-original-key-abcdef");
+        assertThat(cryptoService.decrypt(beforeCipher)).isEqualTo("sk-original-key-abcdef");
+
+        mvc.perform(post("/api/v1/ai/settings/reset")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    /** AI 设置生效链路：保存设置后生成流程改走大模型；清空后回退本地规则引擎。 */
+    @Test
+    void AI设置切换大模型并可回退() throws Exception {
+        // 本地模拟 OpenAI 兼容接口，返回一个可被解析为流程的最小 JSON
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        String flowJson = """
+                {"schemaVersion":1,"nodes":[{"id":"n1","type":"trigger","subtype":"schedule",
+                 "title":"模型生成","position":{"x":60,"y":140},"config":{}}],"connections":[]}
+                """;
+        String reply = json.writeValueAsString(Map.of("choices",
+                List.of(Map.of("message", Map.of("content", flowJson)))));
+        server.createContext("/v1/chat/completions", exchange -> {
+            byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        String token = login();
+        try {
+            String endpoint = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1/chat/completions";
+            mvc.perform(put("/api/v1/ai/settings")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"provider\":\"custom\",\"endpoint\":\"" + endpoint
+                                    + "\",\"model\":\"mock-model\",\"apiKey\":\"sk-mock\"}"))
+                    .andExpect(status().isOk());
+
+            MvcResult llm = mvc.perform(post("/api/v1/ai/generate-flow")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"prompt\":\"生成一个流程\",\"projectId\":\"P-001\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.source").value("llm"))
+                    .andExpect(jsonPath("$.data.provider").value("custom"))
+                    .andReturn();
+            assertThat(read(llm).path("data").path("flow").path("nodes").size()).isEqualTo(1);
+
+            mvc.perform(post("/api/v1/ai/settings/reset")
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk());
+            MvcResult local = mvc.perform(post("/api/v1/ai/generate-flow")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"prompt\":\"每 10 分钟读取 OPC UA 温度\",\"projectId\":\"P-001\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.source").value("local-template"))
+                    .andReturn();
+            assertThat(read(local).path("data").path("flow").path("nodes").size()).isGreaterThanOrEqualTo(2);
+        } finally {
+            server.stop(0);
+            mvc.perform(post("/api/v1/ai/settings/reset")
+                            .header("Authorization", "Bearer " + token));
+        }
     }
 
     /** 系统只保留 admin：历史演示角色不能登录，用户表里也不应存在。 */
